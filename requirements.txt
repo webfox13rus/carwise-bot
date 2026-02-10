@@ -1,4 +1,6 @@
 aiogram==3.10.0
-sqlalchemy==2.0.25
+sqlalchemy==2.0.28  # Последняя версия 2.0.x
+alembic==1.13.1
 python-dotenv==1.0.0
 aiofiles==23.2.1
+pytz==2024.1
