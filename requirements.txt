@@ -1,0 +1,9 @@
+aiogram==3.10.0
+sqlalchemy==2.0.25
+alembic==1.13.1
+python-dotenv==1.0.0
+pandas==2.2.1
+matplotlib==3.8.3
+seaborn==0.13.2
+aiofiles==23.2.1
+pytz==2024.1

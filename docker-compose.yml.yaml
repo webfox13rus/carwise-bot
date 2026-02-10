@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: carwise_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # PostgreSQL (опционально)
+  postgres:
+    image: postgres:15-alpine
+    container_name: carwise_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: carwise
+      POSTGRES_USER: carwise_user
+      POSTGRES_PASSWORD: carwise_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:
