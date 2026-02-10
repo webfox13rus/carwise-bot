@@ -1,123 +1,71 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+import sqlite3
 from datetime import datetime
-import pytz
+import os
 
-from config import config
+class Database:
+    def __init__(self, db_path="carwise.db"):
+        self.db_path = db_path
+        self.init_db()
+    
+    def init_db(self):
+        """Инициализация базы данных"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Пользователи
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                telegram_id INTEGER PRIMARY KEY,
+                username TEXT,
+                first_name TEXT,
+                registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Автомобили
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS cars (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                brand TEXT NOT NULL,
+                model TEXT NOT NULL,
+                year INTEGER,
+                current_mileage REAL DEFAULT 0,
+                fuel_type TEXT DEFAULT 'AI-95',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # События
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                car_id INTEGER,
+                type TEXT NOT NULL,
+                cost REAL NOT NULL,
+                description TEXT,
+                mileage REAL,
+                date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+    
+    # Простые методы
+    def add_user(self, telegram_id, username, first_name):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT OR IGNORE INTO users (telegram_id, username, first_name)
+            VALUES (?, ?, ?)
+        ''', (telegram_id, username, first_name))
+        conn.commit()
+        conn.close()
 
-# Создаем базовый класс
-Base = declarative_base()
-
-class User(Base):
-    __tablename__ = 'users'
-    
-    id = Column(Integer, primary_key=True)
-    telegram_id = Column(Integer, unique=True, nullable=False)
-    username = Column(String(100))
-    first_name = Column(String(100))
-    last_name = Column(String(100))
-    language = Column(String(10), default='ru')
-    created_at = Column(DateTime, default=lambda: datetime.now(pytz.timezone('Europe/Moscow')))
-    is_active = Column(Boolean, default=True)
-    
-    # Связи
-    cars = relationship("Car", back_populates="user", cascade="all, delete-orphan")
-
-class Car(Base):
-    __tablename__ = 'cars'
-    
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.telegram_id'))
-    name = Column(String(100))  # Пользовательское имя авто
-    brand = Column(String(100))
-    model = Column(String(100))
-    year = Column(Integer)
-    vin = Column(String(50))
-    license_plate = Column(String(20))
-    current_mileage = Column(Float, default=0)
-    average_fuel_consumption = Column(Float, default=0)
-    fuel_type = Column(String(20), default='AI-95')
-    created_at = Column(DateTime, default=lambda: datetime.now(pytz.timezone('Europe/Moscow')))
-    is_active = Column(Boolean, default=True)
-    
-    # Связи
-    user = relationship("User", back_populates="cars")
-    events = relationship("Event", back_populates="car", cascade="all, delete-orphan")
-    maintenance = relationship("MaintenanceRecord", back_populates="car", cascade="all, delete-orphan")
-
-class Event(Base):
-    __tablename__ = 'events'
-    
-    id = Column(Integer, primary_key=True)
-    car_id = Column(Integer, ForeignKey('cars.id'))
-    category = Column(String(50))
-    type = Column(String(100))  # Конкретный тип (заправка, замена масла и т.д.)
-    cost = Column(Float)
-    amount = Column(Float)  # Количество литров, часов работы и т.д.
-    unit = Column(String(20))  # литры, штуки, часы
-    description = Column(Text)
-    mileage = Column(Float)
-    location = Column(String(200))
-    receipt_photo = Column(String(500))  # Ссылка на фото чека
-    date = Column(DateTime, default=lambda: datetime.now(pytz.timezone('Europe/Moscow')))
-    created_at = Column(DateTime, default=lambda: datetime.now(pytz.timezone('Europe/Moscow')))
-    
-    # Связи
-    car = relationship("Car", back_populates="events")
-
-class MaintenanceRecord(Base):
-    __tablename__ = 'maintenance_records'
-    
-    id = Column(Integer, primary_key=True)
-    car_id = Column(Integer, ForeignKey('cars.id'))
-    maintenance_type = Column(String(50))
-    description = Column(Text)
-    cost = Column(Float)
-    mileage = Column(Float)
-    date = Column(DateTime, default=lambda: datetime.now(pytz.timezone('Europe/Moscow')))
-    next_due_mileage = Column(Float)
-    next_due_date = Column(DateTime)
-    is_completed = Column(Boolean, default=True)
-    
-    # Связи
-    car = relationship("Car", back_populates="maintenance")
-
-class FuelPrice(Base):
-    __tablename__ = 'fuel_prices'
-    
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.telegram_id'))
-    fuel_type = Column(String(20))
-    price = Column(Float)
-    gas_station = Column(String(100))
-    date = Column(DateTime, default=lambda: datetime.now(pytz.timezone('Europe/Moscow')))
-
-class Reminder(Base):
-    __tablename__ = 'reminders'
-    
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.telegram_id'))
-    car_id = Column(Integer, ForeignKey('cars.id'))
-    reminder_type = Column(String(50))
-    message = Column(Text)
-    due_date = Column(DateTime)
-    due_mileage = Column(Float)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(pytz.timezone('Europe/Moscow')))
-
-# Создаем движок и таблицы
-engine = create_engine(config.DATABASE_URL)
-SessionLocal = sessionmaker(bind=engine)
+# Глобальный экземпляр
+db = Database()
 
 def init_db():
-    """Инициализация базы данных"""
-    Base.metadata.create_all(bind=engine)
-
-def get_db():
-    """Получение сессии БД"""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    """Инициализация БД для импорта из main.py"""
+    return db.init_db()
