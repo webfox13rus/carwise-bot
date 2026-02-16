@@ -64,7 +64,7 @@ async def add_car_start(message: types.Message, state: FSMContext):
         "🚗 *Добавление нового автомобиля*\n\n"
         "Введите *марку* автомобиля:\n"
         "(Например: Toyota, BMW, Lada)",
-        parse_mode="Markdown",
+      
         reply_markup=get_cancel_keyboard()
     )
 
