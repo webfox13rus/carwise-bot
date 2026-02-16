@@ -4,18 +4,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    # Токен бота
     BOT_TOKEN = os.getenv("BOT_TOKEN")
-    
-    # База данных
     DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///carwise.db")
     
-    # Настройки
-    ADMIN_IDS = []
-    
-    # Проверка SQLite
-    IS_SQLITE = DATABASE_URL.startswith("sqlite")
-    
-    TIMEZONE = "Europe/Moscow"
+    DEFAULT_FUEL_TYPES = {
+        "92": "АИ-92",
+        "95": "АИ-95",
+        "98": "АИ-98",
+        "dt": "ДТ",
+        "gas": "Газ",
+        "electric": "Электричество"
+    }
 
 config = Config()
