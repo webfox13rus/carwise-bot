@@ -17,7 +17,7 @@ async def add_fuel_start(message: types.Message, state: FSMContext):
         "⛽ *Добавление заправки*\n\n"
         "Введите количество литров:\n"
         "(Например: 45.5)",
-        parse_mode="Markdown"
+       
     )
 
 @router.message(AddFuel.waiting_for_amount)
@@ -30,7 +30,7 @@ async def process_fuel_amount(message: types.Message, state: FSMContext):
             f"⛽ *{amount} литров*\n\n"
             "Введите сумму в рублях:\n"
             "(Например: 2500)",
-            parse_mode="Markdown"
+           
         )
     except ValueError:
         await message.answer("❌ Введите число (например: 45.5)")
@@ -50,7 +50,7 @@ async def process_fuel_cost(message: types.Message, state: FSMContext):
             f"Сумма: *{cost:.2f} ₽*\n"
             f"Цена за литр: *{price_per_liter:.2f} ₽*\n\n"
             f"💡 *Совет:* Чтобы рассчитать расход, обновите пробег в автомобиле.",
-            parse_mode="Markdown"
+          
         )
         
         await state.clear()
