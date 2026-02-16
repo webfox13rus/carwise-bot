@@ -16,7 +16,7 @@ async def add_maintenance_start(message: types.Message, state: FSMContext):
     await message.answer(
         "🔧 *Добавление обслуживания*\n\n"
         "Введите, что сделали (например: замена масла, шиномонтаж):",
-        parse_mode="Markdown"
+
     )
 
 @router.message(AddMaintenance.waiting_for_description)
@@ -25,7 +25,7 @@ async def process_maint_description(message: types.Message, state: FSMContext):
     await state.set_state(AddMaintenance.waiting_for_cost)
     await message.answer(
         "Введите стоимость в рублях:",
-        parse_mode="Markdown"
+       
     )
 
 @router.message(AddMaintenance.waiting_for_cost)
@@ -38,10 +38,11 @@ async def process_maint_cost(message: types.Message, state: FSMContext):
             f"✅ *Обслуживание добавлено!*\n\n"
             f"*{data['description']}*\n"
             f"Стоимость: *{cost:.2f} ₽*",
-            parse_mode="Markdown"
+            
         )
         
         await state.clear()
     except ValueError:
         await message.answer("❌ Введите число (например: 2500)") 
+
 
