@@ -1,4 +1,5 @@
 from aiogram import Router, types, F
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
@@ -27,11 +28,11 @@ async def process_fuel_amount(message: types.Message, state: FSMContext):
         await state.set_state(AddFuel.waiting_for_cost)
         await message.answer(
             f"⛽ *{amount} литров*\n\n"
-            f"Введите сумму в рублях:\n"
-            f"(Например: 2500)",
+            "Введите сумму в рублях:\n"
+            "(Например: 2500)",
             parse_mode="Markdown"
         )
-    except:
+    except ValueError:
         await message.answer("❌ Введите число (например: 45.5)")
 
 @router.message(AddFuel.waiting_for_cost)
@@ -42,15 +43,16 @@ async def process_fuel_cost(message: types.Message, state: FSMContext):
         
         price_per_liter = cost / data['amount']
         
+        # Здесь можно было бы сохранить в БД, но для MVP просто показываем
         await message.answer(
             f"✅ *Заправка добавлена!*\n\n"
-            f"Количество: *{data['amount']} л*\n"
-            f"Сумма: *{cost} ₽*\n"
+            f"Количество: *{data['amount']:.2f} л*\n"
+            f"Сумма: *{cost:.2f} ₽*\n"
             f"Цена за литр: *{price_per_liter:.2f} ₽*\n\n"
-            f"💡 *Расход:* {data['amount'] / 100 * 100:.1f} л/100км",
+            f"💡 *Совет:* Чтобы рассчитать расход, обновите пробег в автомобиле.",
             parse_mode="Markdown"
         )
         
         await state.clear()
-    except:
+    except ValueError:
         await message.answer("❌ Введите число (например: 2500)")
