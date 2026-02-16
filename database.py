@@ -1,71 +1,75 @@
-import sqlite3
+from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, DateTime, ForeignKey, func
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session, relationship
 from datetime import datetime
-import os
+from config import config
 
-class Database:
-    def __init__(self, db_path="carwise.db"):
-        self.db_path = db_path
-        self.init_db()
+engine = create_engine(config.DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+Base = declarative_base()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+class User(Base):
+    __tablename__ = "users"
     
-    def init_db(self):
-        """Инициализация базы данных"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Пользователи
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                telegram_id INTEGER PRIMARY KEY,
-                username TEXT,
-                first_name TEXT,
-                registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Автомобили
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS cars (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                brand TEXT NOT NULL,
-                model TEXT NOT NULL,
-                year INTEGER,
-                current_mileage REAL DEFAULT 0,
-                fuel_type TEXT DEFAULT 'AI-95',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # События
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                car_id INTEGER,
-                type TEXT NOT NULL,
-                cost REAL NOT NULL,
-                description TEXT,
-                mileage REAL,
-                date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        conn.commit()
-        conn.close()
+    id = Column(Integer, primary_key=True, index=True)
+    telegram_id = Column(Integer, unique=True, index=True, nullable=False)
+    username = Column(String, nullable=True)
+    first_name = Column(String, nullable=True)
+    last_name = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
     
-    # Простые методы
-    def add_user(self, telegram_id, username, first_name):
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT OR IGNORE INTO users (telegram_id, username, first_name)
-            VALUES (?, ?, ?)
-        ''', (telegram_id, username, first_name))
-        conn.commit()
-        conn.close()
+    cars = relationship("Car", back_populates="owner", cascade="all, delete-orphan")
 
-# Глобальный экземпляр
-db = Database()
+class Car(Base):
+    __tablename__ = "cars"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.telegram_id"), nullable=False)
+    brand = Column(String, nullable=False)
+    model = Column(String, nullable=False)
+    year = Column(Integer, nullable=False)
+    name = Column(String, nullable=True)
+    current_mileage = Column(Float, default=0)
+    fuel_type = Column(String, nullable=False)  # код типа топлива (92, 95, dt, и т.д.)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    owner = relationship("User", back_populates="cars")
+    fuel_events = relationship("FuelEvent", back_populates="car", cascade="all, delete-orphan")
+    maintenance_events = relationship("MaintenanceEvent", back_populates="car", cascade="all, delete-orphan")
 
+class FuelEvent(Base):
+    __tablename__ = "fuel_events"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    car_id = Column(Integer, ForeignKey("cars.id"), nullable=False)
+    liters = Column(Float, nullable=False)
+    cost = Column(Float, nullable=False)
+    mileage = Column(Float, nullable=True)  # пробег на момент заправки
+    date = Column(DateTime, default=datetime.utcnow)
+    
+    car = relationship("Car", back_populates="fuel_events")
+
+class MaintenanceEvent(Base):
+    __tablename__ = "maintenance_events"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    car_id = Column(Integer, ForeignKey("cars.id"), nullable=False)
+    description = Column(String, nullable=False)
+    cost = Column(Float, nullable=False)
+    mileage = Column(Float, nullable=True)  # пробег на момент ТО
+    date = Column(DateTime, default=datetime.utcnow)
+    
+    car = relationship("Car", back_populates="maintenance_events")
+
+# Создание таблиц (вызывать один раз при старте)
 def init_db():
-    """Инициализация БД для импорта из main.py"""
-    return db.init_db()
+    Base.metadata.create_all(bind=engine)
