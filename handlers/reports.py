@@ -1,4 +1,4 @@
- from aiogram import Router, types, F
+from aiogram import Router, types, F
 from aiogram.filters import Command
 from sqlalchemy import func
 from database import get_db, Car, FuelEvent, MaintenanceEvent, User
@@ -37,4 +37,5 @@ async def show_stats(message: types.Message):
             f"🔧 Обслуживание: *{total_maintenance:,.2f} ₽*",
             parse_mode="Markdown"
         )
+
 
