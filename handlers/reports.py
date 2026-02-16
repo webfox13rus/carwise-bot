@@ -35,7 +35,8 @@ async def show_stats(message: types.Message):
             f"💰 Всего потрачено: *{total:,.2f} ₽*\n"
             f"⛽ Заправки: *{total_fuel:,.2f} ₽*\n"
             f"🔧 Обслуживание: *{total_maintenance:,.2f} ₽*",
-            parse_mode="Markdown"
+          
         )
+
 
 
