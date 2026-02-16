@@ -10,7 +10,7 @@ from config import config
 
 router = Router()
 
-@router.message(my_cars == "🚗 Мои автомобили")
+@router.message(F.text == "🚗 Мои автомобили")
 async def show_my_cars(message: types.Message):
     """Показать список автомобилей пользователя"""
     with next(get_db()) as db:
