@@ -21,7 +21,7 @@ class AddInsurance(StatesGroup):
     waiting_for_company = State()
     waiting_for_notes = State()
 
-# Функция для создания инлайн-клавиатуры выбора автомобиля (аналогично fuel.py)
+# Вспомогательная клавиатура выбора автомобиля
 def make_car_keyboard(cars):
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[])
     for car in cars:
@@ -33,7 +33,7 @@ def make_car_keyboard(cars):
         ])
     return keyboard
 
-# Вход в добавление страховки
+# Главное меню страховок (подменю)
 @router.message(F.text == "📄 Страховка")
 @router.message(Command("insurance"))
 async def insurance_menu(message: types.Message):
@@ -47,7 +47,12 @@ async def insurance_menu(message: types.Message):
     )
     await message.answer("Управление страховками:", reply_markup=keyboard)
 
-# Добавление страховки
+# Возврат в главное меню
+@router.message(F.text == "◀️ Назад в меню")
+async def back_to_main(message: types.Message):
+    await message.answer("Главное меню:", reply_markup=get_main_menu())
+
+# Начало добавления страховки
 @router.message(F.text == "➕ Добавить страховку")
 @router.message(Command("add_insurance"))
 async def add_insurance_start(message: types.Message, state: FSMContext):
@@ -60,6 +65,7 @@ async def add_insurance_start(message: types.Message, state: FSMContext):
         if not cars:
             await message.answer("У вас нет автомобилей. Сначала добавьте через /add_car")
             return
+
         if len(cars) == 1:
             await state.update_data(car_id=cars[0].id)
             await state.set_state(AddInsurance.waiting_for_end_date)
@@ -75,6 +81,7 @@ async def add_insurance_start(message: types.Message, state: FSMContext):
                 reply_markup=make_car_keyboard(cars)
             )
 
+# Обработка выбора автомобиля через callback
 @router.callback_query(F.data.startswith("ins_car_"))
 async def process_car_choice(callback: types.CallbackQuery, state: FSMContext):
     car_id = int(callback.data.split("_")[-1])
@@ -166,24 +173,25 @@ async def process_notes(message: types.Message, state: FSMContext):
         return
     notes = message.text if message.text != "-" else None
     data = await state.get_data()
-    
+
     with next(get_db()) as db:
         insurance = Insurance(
             car_id=data['car_id'],
             policy_number=data.get('policy'),
             company=data.get('company'),
-            start_date=datetime.now(),  # можно добавить поле start_date в будущем
+            start_date=datetime.now(),  # можно позже добавить поле start_date
             end_date=data['end_date'],
             cost=data['cost'],
             notes=notes,
             notified_7d=False,
-            notified_3d=False
+            notified_3d=False,
+            notified_expired=False
         )
         db.add(insurance)
         db.commit()
-        
+
         car = db.query(Car).filter(Car.id == data['car_id']).first()
-        
+
         await message.answer(
             f"✅ Страховка добавлена!\n\n"
             f"Автомобиль: {car.brand} {car.model}\n"
@@ -191,7 +199,7 @@ async def process_notes(message: types.Message, state: FSMContext):
             f"Стоимость: {data['cost']:.2f} ₽\n"
             f"Номер полиса: {data.get('policy', 'не указан')}\n"
             f"Компания: {data.get('company', 'не указана')}",
-            reply_markup=get_main_menu()
+            reply_markup=get_main_menu()  # возвращаем главное меню
         )
     await state.clear()
 
@@ -204,11 +212,11 @@ async def show_insurances(message: types.Message):
         if not user:
             await message.answer("Сначала зарегистрируйтесь", reply_markup=get_main_menu())
             return
-        cars = db.query(Car).filter(Car.user_id == user.id).all()
+        cars = db.query(Car).filter(Car.user_id == user.id, Car.is_active == True).all()
         if not cars:
             await message.answer("У вас нет автомобилей.", reply_markup=get_main_menu())
             return
-        
+
         response = "📄 Ваши страховки:\n\n"
         found = False
         for car in cars:
@@ -218,16 +226,18 @@ async def show_insurances(message: types.Message):
                 response += f"🚗 {car.brand} {car.model}:\n"
                 for ins in insurances:
                     days_left = (ins.end_date.date() - datetime.now().date()).days
-                    status = "⚠️ Истекает" if days_left <= 30 else "✅ Активна"
+                    if days_left < 0:
+                        status = "❗️ Истекла"
+                    elif days_left <= 7:
+                        status = f"⚠️ Истекает через {days_left} дн."
+                    else:
+                        status = "✅ Активна"
                     response += (
                         f"  • До {ins.end_date.strftime('%d.%m.%Y')} "
-                        f"({days_left} дн.) – {ins.cost:.0f} ₽ {status}\n"
+                        f"– {ins.cost:.0f} ₽ {status}\n"
                     )
                 response += "\n"
         if not found:
             response = "У вас пока нет добавленных страховок."
-        # Кнопка Назад
-        await message.answer(response, reply_markup=get_main_menu())
-        @router.message(F.text == "◀️ Назад в меню")
-async def back_to_main(message: types.Message):
-    await message.answer("Главное меню:", reply_markup=get_main_menu())
+
+        await message.answer(response, reply_markup=get_main_menu())  # после списка возвращаем главное меню
