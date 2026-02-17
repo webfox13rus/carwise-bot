@@ -39,10 +39,7 @@ async def main():
         return
 
     # Инициализация бота
-    bot = Bot(
-        token=BOT_TOKEN,
-        default=DefaultBotProperties(parse_mode="Markdown")
-    )
+    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=None))
     
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
