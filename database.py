@@ -77,14 +77,15 @@ class Insurance(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     car_id = Column(Integer, ForeignKey("cars.id"), nullable=False)
-    policy_number = Column(String, nullable=True)          # номер полиса
-    company = Column(String, nullable=True)                # страховая компания
-    start_date = Column(DateTime, nullable=False)          # дата начала
-    end_date = Column(DateTime, nullable=False)            # дата окончания
-    cost = Column(Float, nullable=False)                   # стоимость
-    notes = Column(String, nullable=True)                  # примечания
-    notified_7d = Column(Boolean, default=False)           # флаг напоминания за 7 дней
-    notified_3d = Column(Boolean, default=False)           # флаг напоминания за 3 дня
+    policy_number = Column(String, nullable=True)
+    company = Column(String, nullable=True)
+    start_date = Column(DateTime, nullable=False)
+    end_date = Column(DateTime, nullable=False)
+    cost = Column(Float, nullable=False)
+    notes = Column(String, nullable=True)
+    notified_7d = Column(Boolean, default=False)
+    notified_3d = Column(Boolean, default=False)
+    notified_expired = Column(Boolean, default=False)  # новое поле
     
     car = relationship("Car", back_populates="insurances")
 
