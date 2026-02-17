@@ -36,10 +36,16 @@ def make_car_keyboard(cars):
 # Вход в добавление страховки
 @router.message(F.text == "📄 Страховка")
 @router.message(Command("insurance"))
-async def insurance_menu(message: types.Message, state: FSMContext):
-    # Показываем подменю (можно сразу начать добавление или показать список)
-    # Для простоты сразу перейдём к выбору авто для добавления
-    await add_insurance_start(message, state)
+async def insurance_menu(message: types.Message):
+    keyboard = types.ReplyKeyboardMarkup(
+        keyboard=[
+            [types.KeyboardButton(text="➕ Добавить страховку")],
+            [types.KeyboardButton(text="📄 Мои страховки")],
+            [types.KeyboardButton(text="◀️ Назад в меню")]
+        ],
+        resize_keyboard=True
+    )
+    await message.answer("Управление страховками:", reply_markup=keyboard)
 
 # Добавление страховки
 @router.message(F.text == "➕ Добавить страховку")
