@@ -1,11 +1,17 @@
-from aiogram import Router, types
+from aiogram import Router, types, F
 from aiogram.filters import Command
 from sqlalchemy import func
 from database import get_db, Car, FuelEvent, MaintenanceEvent, User
+from keyboards.main_menu import get_main_menu
 
 router = Router()
 
+# Обработчик для команды /stats
 @router.message(Command("stats"))
+# Обработчик для кнопки "Статистика" (без эмодзи)
+@router.message(F.text == "Статистика")
+# Также можно добавить вариант с эмодзи, если он есть в меню:
+# @router.message(F.text == "📊 Статистика")
 async def show_stats(message: types.Message):
     with next(get_db()) as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
@@ -29,5 +35,6 @@ async def show_stats(message: types.Message):
             f"Количество авто: {len(cars)}\n"
             f"💰 Всего потрачено: {total:,.2f} ₽\n"
             f"⛽ Заправки: {total_fuel:,.2f} ₽\n"
-            f"🔧 Обслуживание: {total_maintenance:,.2f} ₽"
+            f"🔧 Обслуживание: {total_maintenance:,.2f} ₽",
+            reply_markup=get_main_menu()  # возвращаем меню после вывода статистики
         )
