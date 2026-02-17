@@ -1,13 +1,13 @@
 import logging
+from datetime import datetime
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy import func
-from datetime import datetime
 
 from states.car_states import AddCarStates, MileageUpdateStates
 from keyboards.main_menu import get_main_menu, get_cancel_keyboard, get_fuel_types_keyboard
-from database import get_db, Car, User, FuelEvent, MaintenanceEvent
+from database import get_db, Car, User, FuelEvent, MaintenanceEvent, Insurance
 from config import config
 from car_data import CAR_BRANDS, get_models_for_brand
 
@@ -25,13 +25,11 @@ def make_inline_keyboard(items: list, callback_prefix: str, columns: int = 2) ->
             row = []
     if row:
         keyboard.append(row)
-    # Кнопка ручного ввода
     keyboard.append([types.InlineKeyboardButton(text="✏️ Ввести вручную", callback_data=f"{callback_prefix}:manual")])
-    # Кнопка отмены (опционально)
     keyboard.append([types.InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")])
     return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
 
-# ------------------- Просмотр автомобилей -------------------
+# ------------------- Просмотр автомобилей (с информацией о страховке) -------------------
 @router.message(F.text == "🚗 Мои автомобили")
 @router.message(Command("my_cars"))
 async def show_my_cars(message: types.Message):
@@ -53,11 +51,31 @@ async def show_my_cars(message: types.Message):
             fuel_total = db.query(FuelEvent).filter(FuelEvent.car_id == car.id).with_entities(func.sum(FuelEvent.cost)).scalar() or 0
             maint_total = db.query(MaintenanceEvent).filter(MaintenanceEvent.car_id == car.id).with_entities(func.sum(MaintenanceEvent.cost)).scalar() or 0
             total_spent = fuel_total + maint_total
+            
+            # Получаем страховки для этого автомобиля
+            insurances = db.query(Insurance).filter(Insurance.car_id == car.id).all()
+            insurance_info = ""
+            if insurances:
+                # Сортируем по дате окончания (ближайшая первая)
+                sorted_ins = sorted(insurances, key=lambda x: x.end_date)
+                nearest = sorted_ins[0]
+                days_left = (nearest.end_date.date() - datetime.now().date()).days
+                if days_left < 0:
+                    status = "❗️Истекла"
+                elif days_left <= 7:
+                    status = f"⚠️Истекает через {days_left} дн."
+                else:
+                    status = "✅Активна"
+                insurance_info = f"Страховка: до {nearest.end_date.strftime('%d.%m.%Y')} {status}\n"
+            else:
+                insurance_info = "Страховка: не добавлена\n"
+            
             response += (
                 f"{car.brand} {car.model} ({car.year})\n"
                 f"Пробег: {car.current_mileage:,.0f} км\n"
                 f"Тип топлива: {config.DEFAULT_FUEL_TYPES.get(car.fuel_type, car.fuel_type)}\n"
                 f"Общие расходы: {total_spent:,.2f} ₽\n"
+                f"{insurance_info}"
                 f"ID: {car.id}\n"
             )
             if car.name:
@@ -104,7 +122,6 @@ async def process_brand_callback(callback: types.CallbackQuery, state: FSMContex
         )
         await state.set_state(AddCarStates.waiting_for_model)
     else:
-        # Если моделей нет, сразу на ввод модели вручную
         await state.set_state(AddCarStates.waiting_for_model_manual)
         await callback.message.edit_text(
             f"Выбрана марка: {brand}\nВведите модель автомобиля вручную:"
@@ -177,7 +194,6 @@ async def process_year(message: types.Message, state: FSMContext):
             await message.answer(f"❌ Пожалуйста, введите корректный год (1900-{current_year+1})")
             return
         await state.update_data(year=year)
-        # Переходим к имени (опционально)
         await state.set_state(AddCarStates.waiting_for_name)
         await message.answer(
             "💡 Хотите дать автомобилю имя (псевдоним)?\n"
@@ -246,7 +262,6 @@ async def process_fuel_type(callback: types.CallbackQuery, state: FSMContext):
     confirmation_text += "\nВсё верно?"
 
     await callback.message.edit_text(confirmation_text)
-    # Отправляем клавиатуру подтверждения
     await callback.message.answer(
         "Подтвердите добавление автомобиля:",
         reply_markup=types.ReplyKeyboardMarkup(
@@ -368,7 +383,6 @@ async def process_new_mileage(message: types.Message, state: FSMContext):
             if car:
                 old_mileage = car.current_mileage
                 if new_mileage < old_mileage:
-                    # Запрашиваем подтверждение на уменьшение пробега
                     await message.answer(
                         "⚠️ Внимание!\n\n"
                         f"Новый пробег ({new_mileage:,.0f} км) меньше текущего ({old_mileage:,.0f} км).\n"
