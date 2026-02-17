@@ -1,13 +1,11 @@
 # car_data.py
 
-# Популярные марки автомобилей
 CAR_BRANDS = [
     "Toyota", "BMW", "Mercedes-Benz", "Audi", "Volkswagen",
     "Lada", "Kia", "Hyundai", "Renault", "Nissan",
     "Ford", "Chevrolet", "Mazda", "Skoda", "Mitsubishi"
 ]
 
-# Модели по маркам (для примера, можно расширить)
 CAR_MODELS = {
     "Toyota": ["Camry", "Corolla", "RAV4", "Land Cruiser", "Yaris"],
     "BMW": ["X5", "X3", "3 Series", "5 Series", "M5"],
@@ -27,5 +25,4 @@ CAR_MODELS = {
 }
 
 def get_models_for_brand(brand: str) -> list:
-    """Возвращает список моделей для марки или пустой список, если марка не найдена"""
     return CAR_MODELS.get(brand, [])
