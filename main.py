@@ -3,18 +3,18 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
-from apscheduler.schedulers.asyncio import AsyncIOScheduler  # новый импорт
-from datetime import datetime, timedelta
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from datetime import datetime
 import os
 
 from config import config
-from database import init_db, SessionLocal, Insurance, Car, User  # добавили SessionLocal, Insurance
+from database import init_db, SessionLocal, Insurance, Car, User
 from handlers.start import router as start_router
 from handlers.cars import router as cars_router
 from handlers.fuel import router as fuel_router
 from handlers.maintenance import router as maintenance_router
 from handlers.reports import router as reports_router
-from handlers.insurance import router as insurance_router  # новый роутер
+from handlers.insurance import router as insurance_router
 
 # Настройка логирования
 logging.basicConfig(
@@ -116,7 +116,7 @@ async def main():
     dp.include_router(fuel_router)
     dp.include_router(maintenance_router)
     dp.include_router(reports_router)
-    dp.include_router(insurance_router)  # новый роутер
+    dp.include_router(insurance_router)  # роутер для страховок
 
     # Удаляем вебхук
     await bot.delete_webhook(drop_pending_updates=True)
