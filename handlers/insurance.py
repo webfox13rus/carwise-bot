@@ -226,5 +226,8 @@ async def show_insurances(message: types.Message):
                 response += "\n"
         if not found:
             response = "У вас пока нет добавленных страховок."
-        
+        # Кнопка Назад
         await message.answer(response, reply_markup=get_main_menu())
+        @router.message(F.text == "◀️ Назад в меню")
+async def back_to_main(message: types.Message):
+    await message.answer("Главное меню:", reply_markup=get_main_menu())
