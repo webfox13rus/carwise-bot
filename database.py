@@ -32,19 +32,20 @@ class Car(Base):
     __tablename__ = "cars"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.telegram_id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     brand = Column(String, nullable=False)
     model = Column(String, nullable=False)
     year = Column(Integer, nullable=False)
     name = Column(String, nullable=True)
     current_mileage = Column(Float, default=0)
-    fuel_type = Column(String, nullable=False)  # код типа топлива (92, 95, dt, и т.д.)
+    fuel_type = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     owner = relationship("User", back_populates="cars")
     fuel_events = relationship("FuelEvent", back_populates="car", cascade="all, delete-orphan")
     maintenance_events = relationship("MaintenanceEvent", back_populates="car", cascade="all, delete-orphan")
+    insurances = relationship("Insurance", back_populates="car", cascade="all, delete-orphan")  # новая связь
 
 class FuelEvent(Base):
     __tablename__ = "fuel_events"
@@ -53,7 +54,7 @@ class FuelEvent(Base):
     car_id = Column(Integer, ForeignKey("cars.id"), nullable=False)
     liters = Column(Float, nullable=False)
     cost = Column(Float, nullable=False)
-    mileage = Column(Float, nullable=True)  # пробег на момент заправки
+    mileage = Column(Float, nullable=True)
     date = Column(DateTime, default=datetime.utcnow)
     
     car = relationship("Car", back_populates="fuel_events")
@@ -65,11 +66,27 @@ class MaintenanceEvent(Base):
     car_id = Column(Integer, ForeignKey("cars.id"), nullable=False)
     description = Column(String, nullable=False)
     cost = Column(Float, nullable=False)
-    mileage = Column(Float, nullable=True)  # пробег на момент ТО
+    mileage = Column(Float, nullable=True)
     date = Column(DateTime, default=datetime.utcnow)
     
     car = relationship("Car", back_populates="maintenance_events")
 
-# Создание таблиц (вызывать один раз при старте)
+# Новая модель для страховок
+class Insurance(Base):
+    __tablename__ = "insurances"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    car_id = Column(Integer, ForeignKey("cars.id"), nullable=False)
+    policy_number = Column(String, nullable=True)          # номер полиса
+    company = Column(String, nullable=True)                # страховая компания
+    start_date = Column(DateTime, nullable=False)          # дата начала
+    end_date = Column(DateTime, nullable=False)            # дата окончания
+    cost = Column(Float, nullable=False)                   # стоимость
+    notes = Column(String, nullable=True)                  # примечания
+    notified_7d = Column(Boolean, default=False)           # флаг напоминания за 7 дней
+    notified_3d = Column(Boolean, default=False)           # флаг напоминания за 3 дня
+    
+    car = relationship("Car", back_populates="insurances")
+
 def init_db():
     Base.metadata.create_all(bind=engine)
