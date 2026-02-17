@@ -34,16 +34,18 @@ async def check_insurances(bot: Bot):
         for ins in insurances:
             days_left = (ins.end_date.date() - today).days
             car = ins.car
+            if not car:
+                continue
             user_id = car.user.telegram_id
 
             # Напоминание за 7 дней
-            if days_left <= 7 and not ins.notified_7d:
+            if 0 < days_left <= 7 and not ins.notified_7d:
                 try:
                     await bot.send_message(
                         user_id,
                         f"⚠️ Напоминание о страховке!\n\n"
                         f"Автомобиль: {car.brand} {car.model}\n"
-                        f"Срок действия истекает через {days_left} дней ({ins.end_date.strftime('%d.%m.%Y')}).\n"
+                        f"Срок действия истекает через {days_left} дн. ({ins.end_date.strftime('%d.%m.%Y')}).\n"
                         f"Не забудьте продлить."
                     )
                     ins.notified_7d = True
@@ -52,13 +54,13 @@ async def check_insurances(bot: Bot):
                 except Exception as e:
                     logger.error(f"Ошибка отправки уведомления (7 дней): {e}")
 
-            # Напоминание за 3 дня (если ещё не отправляли)
-            elif days_left <= 3 and not ins.notified_3d:
+            # Напоминание за 3 дня
+            elif 0 < days_left <= 3 and not ins.notified_3d:
                 try:
                     await bot.send_message(
                         user_id,
                         f"⚠️⚠️ СРОЧНО! Страховка на {car.brand} {car.model} "
-                        f"истекает через {days_left} дней ({ins.end_date.strftime('%d.%m.%Y')}).\n"
+                        f"истекает через {days_left} дн. ({ins.end_date.strftime('%d.%m.%Y')}).\n"
                         f"Продлите полис, чтобы избежать проблем."
                     )
                     ins.notified_3d = True
@@ -66,6 +68,22 @@ async def check_insurances(bot: Bot):
                     logger.info(f"Уведомление за 3 дня отправлено пользователю {user_id}")
                 except Exception as e:
                     logger.error(f"Ошибка отправки уведомления (3 дня): {e}")
+
+            # Уведомление об истечении (когда срок прошёл)
+            elif days_left <= 0 and not ins.notified_expired:
+                try:
+                    await bot.send_message(
+                        user_id,
+                        f"❗️ СРОК СТРАХОВКИ ИСТЁК!\n\n"
+                        f"Автомобиль: {car.brand} {car.model}\n"
+                        f"Страховка закончилась {ins.end_date.strftime('%d.%m.%Y')}.\n"
+                        f"Необходимо приобрести новый полис."
+                    )
+                    ins.notified_expired = True
+                    db.commit()
+                    logger.info(f"Уведомление об истечении отправлено пользователю {user_id}")
+                except Exception as e:
+                    logger.error(f"Ошибка отправки уведомления об истечении: {e}")
 
 async def main():
     # Проверяем токен
