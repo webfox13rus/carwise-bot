@@ -5,7 +5,8 @@ def get_main_menu():
         keyboard=[
             [KeyboardButton(text="🚗 Мои автомобили"), KeyboardButton(text="➕ Добавить авто")],
             [KeyboardButton(text="⛽ Заправка"), KeyboardButton(text="🔧 Обслуживание")],
-            [KeyboardButton(text="📊 Статистика"), KeyboardButton(text="🔄 Обновить пробег")]
+            [KeyboardButton(text="📊 Статистика"), KeyboardButton(text="🔄 Обновить пробег")],
+            [KeyboardButton(text="📄 Страховка")]  # новая кнопка
         ],
         resize_keyboard=True
     )
