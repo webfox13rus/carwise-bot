@@ -1,17 +1,35 @@
+import logging
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from sqlalchemy import func
+
 from database import get_db, Car, FuelEvent, User
-from keyboards.main_menu import get_main_menu, get_cancel_keyboard
+from keyboards.main_menu import get_main_menu, get_cancel_keyboard, get_fuel_types_keyboard
+from config import config
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 class AddFuel(StatesGroup):
     waiting_for_car = State()
     waiting_for_amount = State()
     waiting_for_cost = State()
     waiting_for_mileage = State()
+    waiting_for_fuel_type = State()  # новое состояние
+
+# Вспомогательная клавиатура выбора автомобиля
+def make_car_keyboard(cars):
+    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[])
+    for car in cars:
+        keyboard.inline_keyboard.append([
+            types.InlineKeyboardButton(
+                text=f"{car.brand} {car.model} - {car.current_mileage:,.0f} км",
+                callback_data=f"fuel_car_{car.id}"
+            )
+        ])
+    return keyboard
 
 @router.message(F.text == "⛽ Заправка")
 @router.message(Command("fuel"))
@@ -25,6 +43,7 @@ async def add_fuel_start(message: types.Message, state: FSMContext):
         if not cars:
             await message.answer("У вас нет автомобилей. Сначала добавьте через /add_car")
             return
+
         if len(cars) == 1:
             await state.update_data(car_id=cars[0].id)
             await state.set_state(AddFuel.waiting_for_amount)
@@ -35,17 +54,11 @@ async def add_fuel_start(message: types.Message, state: FSMContext):
                 reply_markup=get_cancel_keyboard()
             )
         else:
-            # Создаём инлайн-клавиатуру для выбора авто
-            keyboard = types.InlineKeyboardMarkup(inline_keyboard=[])
-            for car in cars:
-                keyboard.inline_keyboard.append([
-                    types.InlineKeyboardButton(
-                        text=f"{car.brand} {car.model} - {car.current_mileage:,.0f} км",
-                        callback_data=f"fuel_car_{car.id}"
-                    )
-                ])
             await state.set_state(AddFuel.waiting_for_car)
-            await message.answer("Выберите автомобиль:", reply_markup=keyboard)
+            await message.answer(
+                "Выберите автомобиль:",
+                reply_markup=make_car_keyboard(cars)
+            )
 
 @router.callback_query(F.data.startswith("fuel_car_"))
 async def process_car_choice(callback: types.CallbackQuery, state: FSMContext):
@@ -104,35 +117,75 @@ async def process_fuel_mileage(message: types.Message, state: FSMContext):
         return
     try:
         mileage = float(message.text.replace(',', '.'))
-        data = await state.get_data()
-        car_id = data['car_id']
-        amount = data['amount']
-        cost = data['cost']
-        price_per_liter = cost / amount
-
-        with next(get_db()) as db:
-            # Создаём событие заправки
-            fuel_event = FuelEvent(
-                car_id=car_id,
-                liters=amount,
-                cost=cost,
-                mileage=mileage
-            )
-            db.add(fuel_event)
-            # Обновляем пробег автомобиля, если новый пробег больше текущего
-            car = db.query(Car).filter(Car.id == car_id).first()
-            if car and mileage > car.current_mileage:
-                car.current_mileage = mileage
-            db.commit()
-
+        await state.update_data(mileage=mileage)
+        await state.set_state(AddFuel.waiting_for_fuel_type)
         await message.answer(
+            "⛽ Выберите тип топлива:",
+            reply_markup=get_fuel_types_keyboard()
+        )
+    except ValueError:
+        await message.answer("❌ Введите число (например: 150000)")
+
+@router.callback_query(AddFuel.waiting_for_fuel_type, F.data.startswith("fuel_type_"))
+async def process_fuel_type(callback: types.CallbackQuery, state: FSMContext):
+    fuel_type = callback.data.split("_")[-1]
+    await state.update_data(fuel_type=fuel_type)
+    data = await state.get_data()
+    car_id = data['car_id']
+    amount = data['amount']
+    cost = data['cost']
+    mileage = data['mileage']
+    price_per_liter = cost / amount
+
+    # Получаем название типа топлива для вывода
+    fuel_name = config.DEFAULT_FUEL_TYPES.get(fuel_type, fuel_type)
+
+    with next(get_db()) as db:
+        # Создаём событие заправки
+        fuel_event = FuelEvent(
+            car_id=car_id,
+            liters=amount,
+            cost=cost,
+            mileage=mileage,
+            fuel_type=fuel_type
+        )
+        db.add(fuel_event)
+        # Обновляем пробег автомобиля, если новый пробег больше текущего
+        car = db.query(Car).filter(Car.id == car_id).first()
+        if car and mileage > car.current_mileage:
+            car.current_mileage = mileage
+        db.commit()
+
+        # Расчёт расхода между последними двумя заправками
+        consumption_info = ""
+        if car:
+            # Находим две последние заправки для этого авто (включая только что добавленную)
+            last_two = db.query(FuelEvent).filter(FuelEvent.car_id == car_id).order_by(FuelEvent.date.desc()).limit(2).all()
+            if len(last_two) == 2:
+                # Сортировка по возрастанию даты: старая первая
+                older, newer = sorted(last_two, key=lambda x: x.date)
+                if newer.mileage and older.mileage and newer.mileage > older.mileage:
+                    distance = newer.mileage - older.mileage
+                    if distance > 0:
+                        # Сумма литров между ними – это литры старой заправки? Нет, берём литры новой?
+                        # Правильнее: расход = (литры новой заправки) * 100 / пройденный путь
+                        # Но литры новой заправки были залиты после пробега, поэтому расход считается по последней заправке и пройденному пути с предыдущей.
+                        # Обычно формула: (литры / пробег) * 100, где пробег – разница между текущей и предыдущей заправками.
+                        consumption = (newer.liters / distance) * 100
+                        consumption_info = f"\n\n📊 Расход после предыдущей заправки: {consumption:.2f} л/100км"
+
+        await callback.message.edit_text(
             f"✅ Заправка добавлена!\n\n"
             f"Количество: {amount:.2f} л\n"
             f"Сумма: {cost:.2f} ₽\n"
             f"Цена за литр: {price_per_liter:.2f} ₽\n"
-            f"Пробег: {mileage:,.0f} км",
+            f"Пробег: {mileage:,.0f} км\n"
+            f"Тип топлива: {fuel_name}"
+            f"{consumption_info}"
+        )
+        await callback.message.answer(
+            "Главное меню:",
             reply_markup=get_main_menu()
         )
-        await state.clear()
-    except ValueError:
-        await message.answer("❌ Введите число (например: 150000)")
+    await state.clear()
+    await callback.answer()
