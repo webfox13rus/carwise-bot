@@ -38,14 +38,14 @@ class Car(Base):
     year = Column(Integer, nullable=False)
     name = Column(String, nullable=True)
     current_mileage = Column(Float, default=0)
-    fuel_type = Column(String, nullable=False)
+    fuel_type = Column(String, nullable=False)  # основной тип топлива (для информации)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     owner = relationship("User", back_populates="cars")
     fuel_events = relationship("FuelEvent", back_populates="car", cascade="all, delete-orphan")
     maintenance_events = relationship("MaintenanceEvent", back_populates="car", cascade="all, delete-orphan")
-    insurances = relationship("Insurance", back_populates="car", cascade="all, delete-orphan")  # новая связь
+    insurances = relationship("Insurance", back_populates="car", cascade="all, delete-orphan")
 
 class FuelEvent(Base):
     __tablename__ = "fuel_events"
@@ -54,7 +54,8 @@ class FuelEvent(Base):
     car_id = Column(Integer, ForeignKey("cars.id"), nullable=False)
     liters = Column(Float, nullable=False)
     cost = Column(Float, nullable=False)
-    mileage = Column(Float, nullable=True)
+    mileage = Column(Float, nullable=True)          # пробег на момент заправки
+    fuel_type = Column(String, nullable=True)       # тип топлива для этой заправки
     date = Column(DateTime, default=datetime.utcnow)
     
     car = relationship("Car", back_populates="fuel_events")
@@ -71,7 +72,6 @@ class MaintenanceEvent(Base):
     
     car = relationship("Car", back_populates="maintenance_events")
 
-# Новая модель для страховок
 class Insurance(Base):
     __tablename__ = "insurances"
     
@@ -85,7 +85,7 @@ class Insurance(Base):
     notes = Column(String, nullable=True)
     notified_7d = Column(Boolean, default=False)
     notified_3d = Column(Boolean, default=False)
-    notified_expired = Column(Boolean, default=False)  # новое поле
+    notified_expired = Column(Boolean, default=False)
     
     car = relationship("Car", back_populates="insurances")
 
