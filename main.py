@@ -34,9 +34,10 @@ async def check_insurances(bot: Bot):
         for ins in insurances:
             days_left = (ins.end_date.date() - today).days
             car = ins.car
-            if not car:
+            # Используем car.owner, так как в модели Car отношение называется owner
+            if not car or not car.owner:
                 continue
-            user_id = car.user.telegram_id
+            user_id = car.owner.telegram_id
 
             # Напоминание за 7 дней
             if 0 < days_left <= 7 and not ins.notified_7d:
@@ -116,7 +117,7 @@ async def main():
     dp.include_router(fuel_router)
     dp.include_router(maintenance_router)
     dp.include_router(reports_router)
-    dp.include_router(insurance_router)  # роутер для страховок
+    dp.include_router(insurance_router)
 
     # Удаляем вебхук
     await bot.delete_webhook(drop_pending_updates=True)
