@@ -38,9 +38,17 @@ class Car(Base):
     year = Column(Integer, nullable=False)
     name = Column(String, nullable=True)
     current_mileage = Column(Float, default=0)
-    fuel_type = Column(String, nullable=False)  # основной тип топлива (для информации)
+    fuel_type = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Поля для ТО-напоминаний
+    last_maintenance_mileage = Column(Float, nullable=True)       # пробег при последнем ТО
+    last_maintenance_date = Column(DateTime, nullable=True)       # дата последнего ТО
+    to_mileage_interval = Column(Float, nullable=True)            # интервал по пробегу (км)
+    to_months_interval = Column(Integer, nullable=True)           # интервал по времени (месяцы)
+    notified_to_mileage = Column(Boolean, default=False)          # флаг, что уведомление по пробегу отправлено
+    notified_to_date = Column(Boolean, default=False)             # флаг, что уведомление по дате отправлено
     
     owner = relationship("User", back_populates="cars")
     fuel_events = relationship("FuelEvent", back_populates="car", cascade="all, delete-orphan")
@@ -54,8 +62,8 @@ class FuelEvent(Base):
     car_id = Column(Integer, ForeignKey("cars.id"), nullable=False)
     liters = Column(Float, nullable=False)
     cost = Column(Float, nullable=False)
-    mileage = Column(Float, nullable=True)          # пробег на момент заправки
-    fuel_type = Column(String, nullable=True)       # тип топлива для этой заправки
+    mileage = Column(Float, nullable=True)
+    fuel_type = Column(String, nullable=True)
     date = Column(DateTime, default=datetime.utcnow)
     
     car = relationship("Car", back_populates="fuel_events")
@@ -65,6 +73,7 @@ class MaintenanceEvent(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     car_id = Column(Integer, ForeignKey("cars.id"), nullable=False)
+    category = Column(String, nullable=False)          # to, wash, repair, parts, tires, other
     description = Column(String, nullable=False)
     cost = Column(Float, nullable=False)
     mileage = Column(Float, nullable=True)
