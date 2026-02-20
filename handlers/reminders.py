@@ -64,11 +64,15 @@ async def process_car_choice(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(SetReminder.waiting_for_mileage_interval)
     with next(get_db()) as db:
         car = db.query(Car).filter(Car.id == car_id).first()
-        await callback.message.edit_text(
-            f"⏰ Настройка напоминаний для {car.brand} {car.model}\n\n"
-            "Введите интервал ТО по пробегу в километрах (например, 10000).\n"
-            "Если не хотите получать напоминания по пробегу, отправьте 0:"
-        )
+        if car:
+            await callback.message.edit_text(
+                f"⏰ Настройка напоминаний для {car.brand} {car.model}\n\n"
+                "Введите интервал ТО по пробегу в километрах (например, 10000).\n"
+                "Если не хотите получать напоминания по пробегу, отправьте 0:"
+            )
+        else:
+            await callback.message.edit_text("❌ Автомобиль не найден.")
+            await state.clear()
     await callback.answer()
 
 @router.message(SetReminder.waiting_for_mileage_interval)
@@ -92,6 +96,7 @@ async def process_mileage_interval(message: types.Message, state: FSMContext):
     except ValueError:
         await message.answer("❌ Введите число (например, 10000)")
 
+# ИСПРАВЛЕННАЯ ФУНКЦИЯ: данные сохраняются до закрытия сессии
 @router.message(SetReminder.waiting_for_months_interval)
 async def process_months_interval(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
@@ -112,23 +117,31 @@ async def process_months_interval(message: types.Message, state: FSMContext):
             if car:
                 car.to_mileage_interval = mileage_int if mileage_int > 0 else None
                 car.to_months_interval = months_int if months_int > 0 else None
-                # Сбрасываем флаги, так как интервалы изменились
                 car.notified_to_mileage = False
                 car.notified_to_date = False
                 db.commit()
+                # Сохраняем данные для ответа до закрытия сессии
+                car_brand = car.brand
+                car_model = car.model
+                mileage_display = f"{mileage_int} км" if mileage_int > 0 else "не установлен"
+                months_display = f"{months_int} мес." if months_int > 0 else "не установлен"
+            else:
+                await message.answer("❌ Автомобиль не найден.")
+                await state.clear()
+                return
 
         await message.answer(
             f"✅ Напоминания настроены!\n\n"
-            f"Автомобиль: {car.brand} {car.model}\n"
-            f"Интервал по пробегу: {mileage_int if mileage_int>0 else 'не установлен'} км\n"
-            f"Интервал по времени: {months_int if months_int>0 else 'не установлен'} мес.",
+            f"Автомобиль: {car_brand} {car_model}\n"
+            f"Интервал по пробегу: {mileage_display}\n"
+            f"Интервал по времени: {months_display}",
             reply_markup=get_main_menu()
         )
         await state.clear()
     except ValueError:
         await message.answer("❌ Введите целое число (например, 12)")
 
-# Команда для просмотра текущих настроек
+# Команда для просмотра текущих настроек (тоже проверена на DetachedInstanceError)
 @router.message(Command("show_reminders"))
 async def show_reminders(message: types.Message):
     with next(get_db()) as db:
