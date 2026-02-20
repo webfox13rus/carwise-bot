@@ -4,17 +4,18 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 
 from config import config
-from database import init_db, SessionLocal, Insurance, Car, User
+from database import init_db, SessionLocal, Insurance, Car, User, MaintenanceEvent
 from handlers.start import router as start_router
 from handlers.cars import router as cars_router
 from handlers.fuel import router as fuel_router
 from handlers.maintenance import router as maintenance_router
 from handlers.reports import router as reports_router
 from handlers.insurance import router as insurance_router
+from handlers.reminders import router as reminders_router   # новый роутер
 
 # Настройка логирования
 logging.basicConfig(
@@ -25,7 +26,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Функция для проверки страховок и отправки напоминаний
+# Функция для проверки страховок
 async def check_insurances(bot: Bot):
     logger.info("🔍 Проверка сроков страховок...")
     with SessionLocal() as db:
@@ -34,12 +35,10 @@ async def check_insurances(bot: Bot):
         for ins in insurances:
             days_left = (ins.end_date.date() - today).days
             car = ins.car
-            # Используем car.owner, так как в модели Car отношение называется owner
             if not car or not car.owner:
                 continue
             user_id = car.owner.telegram_id
 
-            # Напоминание за 7 дней
             if 0 < days_left <= 7 and not ins.notified_7d:
                 try:
                     await bot.send_message(
@@ -55,7 +54,6 @@ async def check_insurances(bot: Bot):
                 except Exception as e:
                     logger.error(f"Ошибка отправки уведомления (7 дней): {e}")
 
-            # Напоминание за 3 дня
             elif 0 < days_left <= 3 and not ins.notified_3d:
                 try:
                     await bot.send_message(
@@ -70,7 +68,6 @@ async def check_insurances(bot: Bot):
                 except Exception as e:
                     logger.error(f"Ошибка отправки уведомления (3 дня): {e}")
 
-            # Уведомление об истечении (когда срок прошёл)
             elif days_left <= 0 and not ins.notified_expired:
                 try:
                     await bot.send_message(
@@ -85,6 +82,57 @@ async def check_insurances(bot: Bot):
                     logger.info(f"Уведомление об истечении отправлено пользователю {user_id}")
                 except Exception as e:
                     logger.error(f"Ошибка отправки уведомления об истечении: {e}")
+
+# Новая функция для проверки ТО
+async def check_maintenance_reminders(bot: Bot):
+    logger.info("🔧 Проверка сроков ТО...")
+    with SessionLocal() as db:
+        today = datetime.now().date()
+        cars = db.query(Car).filter(Car.is_active == True).all()
+        for car in cars:
+            if not car.owner:
+                continue
+            user_id = car.owner.telegram_id
+
+            # Проверка по пробегу
+            if car.to_mileage_interval and car.last_maintenance_mileage is not None:
+                next_mileage = car.last_maintenance_mileage + car.to_mileage_interval
+                if car.current_mileage >= next_mileage and not car.notified_to_mileage:
+                    try:
+                        await bot.send_message(
+                            user_id,
+                            f"⚠️ Напоминание о ТО по пробегу!\n\n"
+                            f"Автомобиль: {car.brand} {car.model}\n"
+                            f"Пробег: {car.current_mileage:,.0f} км\n"
+                            f"Последнее ТО было при пробеге {car.last_maintenance_mileage:,.0f} км.\n"
+                            f"Интервал: {car.to_mileage_interval:,.0f} км.\n"
+                            f"Рекомендуется пройти ТО."
+                        )
+                        car.notified_to_mileage = True
+                        db.commit()
+                        logger.info(f"Уведомление о ТО по пробегу отправлено пользователю {user_id}")
+                    except Exception as e:
+                        logger.error(f"Ошибка отправки уведомления о ТО (пробег): {e}")
+
+            # Проверка по дате
+            if car.to_months_interval and car.last_maintenance_date is not None:
+                next_date = car.last_maintenance_date + timedelta(days=30*car.to_months_interval)
+                days_left = (next_date.date() - today).days
+                if days_left <= 0 and not car.notified_to_date:
+                    try:
+                        await bot.send_message(
+                            user_id,
+                            f"⚠️ Напоминание о ТО по времени!\n\n"
+                            f"Автомобиль: {car.brand} {car.model}\n"
+                            f"Последнее ТО было {car.last_maintenance_date.strftime('%d.%m.%Y')}.\n"
+                            f"Интервал: {car.to_months_interval} мес.\n"
+                            f"Рекомендуется пройти ТО."
+                        )
+                        car.notified_to_date = True
+                        db.commit()
+                        logger.info(f"Уведомление о ТО по дате отправлено пользователю {user_id}")
+                    except Exception as e:
+                        logger.error(f"Ошибка отправки уведомления о ТО (дата): {e}")
 
 async def main():
     # Проверяем токен
@@ -105,7 +153,7 @@ async def main():
     # Инициализация бота
     bot = Bot(
         token=BOT_TOKEN,
-        default=DefaultBotProperties(parse_mode=None)  # без Markdown
+        default=DefaultBotProperties(parse_mode=None)
     )
     
     storage = MemoryStorage()
@@ -118,15 +166,17 @@ async def main():
     dp.include_router(maintenance_router)
     dp.include_router(reports_router)
     dp.include_router(insurance_router)
+    dp.include_router(reminders_router)   # новый роутер
 
     # Удаляем вебхук
     await bot.delete_webhook(drop_pending_updates=True)
     
     # Настройка планировщика
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(check_insurances, 'cron', hour=10, minute=0, args=(bot,))  # каждый день в 10:00 UTC
+    scheduler.add_job(check_insurances, 'cron', hour=10, minute=0, args=(bot,))
+    scheduler.add_job(check_maintenance_reminders, 'cron', hour=9, minute=0, args=(bot,))  # проверка ТО в 9:00 UTC
     scheduler.start()
-    logger.info("⏰ Планировщик напоминаний запущен (ежедневно в 10:00 UTC)")
+    logger.info("⏰ Планировщик напоминаний запущен (страховки в 10:00, ТО в 9:00 UTC)")
 
     logger.info("🚀 CarWise Bot запущен на Railway!")
     
