@@ -241,12 +241,24 @@ async def process_mileage(message: types.Message, state: FSMContext):
     except ValueError:
         await message.answer("❌ Пожалуйста, введите число (например, 150000)")
 
-# Выбор типа топлива (callback)
-@router.callback_query(F.data.startswith("fuel_type_"))
+# Выбор типа топлива (callback) – ИСПРАВЛЕНО с проверкой наличия ключей
+@router.callback_query(AddCarStates.waiting_for_fuel_type, F.data.startswith("fuel_type_"))
 async def process_fuel_type(callback: types.CallbackQuery, state: FSMContext):
     fuel_type = callback.data.split("_")[-1]
     await state.update_data(fuel_type=fuel_type)
     data = await state.get_data()
+
+    # Проверяем, что все обязательные поля есть
+    required_keys = ['brand', 'model', 'year', 'mileage']
+    missing_keys = [key for key in required_keys if key not in data]
+    if missing_keys:
+        await callback.message.edit_text(
+            "❌ Ошибка: данные об автомобиле повреждены. Начните добавление заново."
+        )
+        await state.clear()
+        await callback.answer()
+        return
+
     fuel_name = config.DEFAULT_FUEL_TYPES.get(fuel_type, fuel_type)
 
     confirmation_text = (
@@ -283,6 +295,13 @@ async def confirm_car_addition(message: types.Message, state: FSMContext):
         return
 
     data = await state.get_data()
+    # Проверка наличия ключей (на всякий случай)
+    required_keys = ['brand', 'model', 'year', 'mileage', 'fuel_type']
+    if not all(key in data for key in required_keys):
+        await message.answer("❌ Ошибка: не все данные заполнены. Начните заново.")
+        await state.clear()
+        return
+
     with next(get_db()) as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
