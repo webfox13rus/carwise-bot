@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -29,7 +29,7 @@ def make_inline_keyboard(items: list, callback_prefix: str, columns: int = 2) ->
     keyboard.append([types.InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")])
     return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
 
-# ------------------- Просмотр автомобилей (с информацией о страховке) -------------------
+# ------------------- Просмотр автомобилей (с информацией о страховке и ТО) -------------------
 @router.message(F.text == "🚗 Мои автомобили")
 @router.message(Command("my_cars"))
 async def show_my_cars(message: types.Message):
@@ -52,11 +52,10 @@ async def show_my_cars(message: types.Message):
             maint_total = db.query(MaintenanceEvent).filter(MaintenanceEvent.car_id == car.id).with_entities(func.sum(MaintenanceEvent.cost)).scalar() or 0
             total_spent = fuel_total + maint_total
             
-            # Получаем страховки для этого автомобиля
+            # Информация о страховке
             insurances = db.query(Insurance).filter(Insurance.car_id == car.id).all()
             insurance_info = ""
             if insurances:
-                # Сортируем по дате окончания (ближайшая первая)
                 sorted_ins = sorted(insurances, key=lambda x: x.end_date)
                 nearest = sorted_ins[0]
                 days_left = (nearest.end_date.date() - datetime.now().date()).days
@@ -69,13 +68,39 @@ async def show_my_cars(message: types.Message):
                 insurance_info = f"Страховка: до {nearest.end_date.strftime('%d.%m.%Y')} {status}\n"
             else:
                 insurance_info = "Страховка: не добавлена\n"
-            
+
+            # Информация о следующем ТО
+            next_to_info = ""
+            if car.to_mileage_interval or car.to_months_interval:
+                next_to_parts = []
+                if car.to_mileage_interval and car.last_maintenance_mileage is not None:
+                    next_mileage = car.last_maintenance_mileage + car.to_mileage_interval
+                    if car.current_mileage >= next_mileage:
+                        next_to_parts.append("⚠️ по пробегу (нужно ТО!)")
+                    else:
+                        remaining_km = next_mileage - car.current_mileage
+                        next_to_parts.append(f"по пробегу через {remaining_km:,.0f} км")
+                if car.to_months_interval and car.last_maintenance_date is not None:
+                    next_date = car.last_maintenance_date + timedelta(days=30 * car.to_months_interval)
+                    days_left = (next_date.date() - datetime.now().date()).days
+                    if days_left <= 0:
+                        next_to_parts.append("⚠️ по дате (нужно ТО!)")
+                    else:
+                        next_to_parts.append(f"по дате через {days_left} дн.")
+                if next_to_parts:
+                    next_to_info = "Следующее ТО: " + ", ".join(next_to_parts) + "\n"
+                else:
+                    next_to_info = "Следующее ТО: данные неполные\n"
+            else:
+                next_to_info = "Следующее ТО: не настроено\n"
+
             response += (
                 f"{car.brand} {car.model} ({car.year})\n"
                 f"Пробег: {car.current_mileage:,.0f} км\n"
                 f"Тип топлива: {config.DEFAULT_FUEL_TYPES.get(car.fuel_type, car.fuel_type)}\n"
                 f"Общие расходы: {total_spent:,.2f} ₽\n"
                 f"{insurance_info}"
+                f"{next_to_info}"
                 f"ID: {car.id}\n"
             )
             if car.name:
@@ -241,7 +266,7 @@ async def process_mileage(message: types.Message, state: FSMContext):
     except ValueError:
         await message.answer("❌ Пожалуйста, введите число (например, 150000)")
 
-# Выбор типа топлива (callback) – ИСПРАВЛЕНО с проверкой наличия ключей
+# Выбор типа топлива (callback) с защитой от KeyError
 @router.callback_query(AddCarStates.waiting_for_fuel_type, F.data.startswith("fuel_type_"))
 async def process_fuel_type(callback: types.CallbackQuery, state: FSMContext):
     fuel_type = callback.data.split("_")[-1]
