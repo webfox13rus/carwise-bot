@@ -3,6 +3,7 @@ from aiogram.filters import Command
 from sqlalchemy import func
 from database import get_db, Car, FuelEvent, MaintenanceEvent, User
 from keyboards.main_menu import get_main_menu
+from config import config
 
 router = Router()
 
@@ -14,51 +15,59 @@ async def show_stats(message: types.Message):
         if not user:
             await message.answer("Сначала зарегистрируйтесь, отправив /start")
             return
+
         cars = db.query(Car).filter(Car.user_id == user.id, Car.is_active == True).all()
         if not cars:
             await message.answer("У вас нет автомобилей.")
             return
 
-        total_fuel = 0
-        total_maintenance = 0
-        response = "📊 Общая статистика\n\n"
+        total_all_fuel = 0
+        total_all_maintenance = 0
+        response_lines = []
 
         for car in cars:
-            fuel_sum = db.query(FuelEvent).filter(FuelEvent.car_id == car.id).with_entities(func.sum(FuelEvent.cost)).scalar() or 0
+            response_lines.append(f"🚗 {car.brand} {car.model} ({car.year}):")
+            response_lines.append(f"Пробег: {car.current_mileage:,.0f} км")
+
+            # Расходы на обслуживание (суммарно)
             maint_sum = db.query(MaintenanceEvent).filter(MaintenanceEvent.car_id == car.id).with_entities(func.sum(MaintenanceEvent.cost)).scalar() or 0
-            total_fuel += fuel_sum
-            total_maintenance += maint_sum
+            total_all_maintenance += maint_sum
+            if maint_sum > 0:
+                response_lines.append(f"🔧 Обслуживание: {maint_sum:,.2f} ₽")
 
-            # Расчёт среднего расхода по последним заправкам
-            fuel_events = db.query(FuelEvent).filter(FuelEvent.car_id == car.id).order_by(FuelEvent.mileage).all()
-            consumption_info = ""
-            if len(fuel_events) >= 2:
-                total_liters = 0
-                total_distance = 0
-                prev = None
-                for event in fuel_events:
-                    if prev is not None and event.mileage and prev.mileage and event.mileage > prev.mileage:
-                        total_liters += event.liters
-                        total_distance += event.mileage - prev.mileage
-                    prev = event
-                if total_distance > 0:
-                    avg_consumption = (total_liters / total_distance) * 100
-                    consumption_info = f"Средний расход: {avg_consumption:.2f} л/100км"
-                else:
-                    consumption_info = "Недостаточно данных для расхода"
+            # Заправки с группировкой по типу топлива
+            fuel_stats = db.query(
+                FuelEvent.fuel_type,
+                func.sum(FuelEvent.liters).label('total_liters'),
+                func.sum(FuelEvent.cost).label('total_cost')
+            ).filter(FuelEvent.car_id == car.id).group_by(FuelEvent.fuel_type).all()
+
+            car_fuel_total = 0
+            if fuel_stats:
+                response_lines.append("⛽ Заправки по типам топлива:")
+                for fuel_type, liters, cost in fuel_stats:
+                    if fuel_type is None:
+                        type_name = "Не указан"
+                    else:
+                        type_name = config.DEFAULT_FUEL_TYPES.get(fuel_type, fuel_type)
+                    response_lines.append(f"  • {type_name}: {liters:.2f} л – {cost:,.2f} ₽")
+                    car_fuel_total += cost
+                response_lines.append(f"  Всего на топливо: {car_fuel_total:,.2f} ₽")
             else:
-                consumption_info = "Нужно минимум 2 заправки"
+                response_lines.append("⛽ Нет заправок")
 
-            response += (
-                f"🚗 {car.brand} {car.model} ({car.year})\n"
-                f"Пробег: {car.current_mileage:,.0f} км\n"
-                f"Расходы: всего {fuel_sum + maint_sum:,.2f} ₽\n"
-                f"⛽ Заправки: {fuel_sum:,.2f} ₽\n"
-                f"🔧 Обслуживание: {maint_sum:,.2f} ₽\n"
-                f"{consumption_info}\n\n"
-            )
+            total_all_fuel += car_fuel_total
 
-        total = total_fuel + total_maintenance
-        response += f"💰 Итого по всем авто: {total:,.2f} ₽"
+            # Разделитель
+            response_lines.append("────────────")
+            response_lines.append("")  # пустая строка для читаемости
 
-        await message.answer(response, reply_markup=get_main_menu())
+        # Итог по всем авто
+        response_lines.append(f"💰 ИТОГО по всем авто:")
+        response_lines.append(f"⛽ Топливо: {total_all_fuel:,.2f} ₽")
+        response_lines.append(f"🔧 Обслуживание: {total_all_maintenance:,.2f} ₽")
+        response_lines.append(f"💵 Всего: {total_all_fuel + total_all_maintenance:,.2f} ₽")
+
+        # Отправка ответа (объединяем строки)
+        full_response = "\n".join(response_lines)
+        await message.answer(full_response, reply_markup=get_main_menu())
