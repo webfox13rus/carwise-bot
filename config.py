@@ -15,5 +15,14 @@ class Config:
         "gas": "Газ",
         "electric": "Электричество"
     }
+    
+    MAINTENANCE_CATEGORIES = {
+        "to": "🔧 ТО",
+        "wash": "🧼 Мойка",
+        "repair": "🔩 Ремонт",
+        "parts": "⚙️ Запчасти",
+        "tires": "🛞 Шиномонтаж",      # добавлено
+        "other": "📦 Другое"
+    }
 
 config = Config()
