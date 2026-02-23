@@ -25,6 +25,7 @@ class User(Base):
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    is_premium = Column(Boolean, default=False)  # флаг подписки (по умолчанию False)
     
     cars = relationship("Car", back_populates="owner", cascade="all, delete-orphan")
 
@@ -53,7 +54,7 @@ class Car(Base):
     fuel_events = relationship("FuelEvent", back_populates="car", cascade="all, delete-orphan")
     maintenance_events = relationship("MaintenanceEvent", back_populates="car", cascade="all, delete-orphan")
     insurances = relationship("Insurance", back_populates="car", cascade="all, delete-orphan")
-    parts = relationship("Part", back_populates="car", cascade="all, delete-orphan")  # новая связь
+    parts = relationship("Part", back_populates="car", cascade="all, delete-orphan")
 
 class FuelEvent(Base):
     __tablename__ = "fuel_events"
@@ -98,18 +99,17 @@ class Insurance(Base):
     
     car = relationship("Car", back_populates="insurances")
 
-# Новая модель для деталей с интервалами замены
 class Part(Base):
     __tablename__ = "parts"
     
     id = Column(Integer, primary_key=True, index=True)
     car_id = Column(Integer, ForeignKey("cars.id"), nullable=False)
-    name = Column(String, nullable=False)                       # название детали (например, "масло двигателя")
-    interval_mileage = Column(Float, nullable=True)             # интервал по пробегу (км)
-    interval_months = Column(Integer, nullable=True)            # интервал по времени (месяцы)
-    last_mileage = Column(Float, nullable=True)                 # пробег при последней замене
-    last_date = Column(DateTime, nullable=True)                 # дата последней замены
-    notified = Column(Boolean, default=False)                   # флаг, что уведомление отправлено
+    name = Column(String, nullable=False)
+    interval_mileage = Column(Float, nullable=True)
+    interval_months = Column(Integer, nullable=True)
+    last_mileage = Column(Float, nullable=True)
+    last_date = Column(DateTime, nullable=True)
+    notified = Column(Boolean, default=False)
     
     car = relationship("Car", back_populates="parts")
 
