@@ -20,8 +20,8 @@ class AddInsurance(StatesGroup):
     waiting_for_policy = State()
     waiting_for_company = State()
     waiting_for_notes = State()
+    waiting_for_photo = State()  # новое
 
-# Вспомогательная клавиатура выбора автомобиля
 def make_car_keyboard(cars):
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[])
     for car in cars:
@@ -33,7 +33,6 @@ def make_car_keyboard(cars):
         ])
     return keyboard
 
-# Главное меню страховок (подменю)
 @router.message(F.text == "📄 Страховка")
 @router.message(Command("insurance"))
 async def insurance_menu(message: types.Message):
@@ -47,12 +46,10 @@ async def insurance_menu(message: types.Message):
     )
     await message.answer("Управление страховками:", reply_markup=keyboard)
 
-# Возврат в главное меню
 @router.message(F.text == "◀️ Назад в меню")
 async def back_to_main(message: types.Message):
     await message.answer("Главное меню:", reply_markup=get_main_menu())
 
-# Начало добавления страховки
 @router.message(F.text == "➕ Добавить страховку")
 @router.message(Command("add_insurance"))
 async def add_insurance_start(message: types.Message, state: FSMContext):
@@ -81,7 +78,6 @@ async def add_insurance_start(message: types.Message, state: FSMContext):
                 reply_markup=make_car_keyboard(cars)
             )
 
-# Обработка выбора автомобиля через callback
 @router.callback_query(F.data.startswith("ins_car_"))
 async def process_car_choice(callback: types.CallbackQuery, state: FSMContext):
     car_id = int(callback.data.split("_")[-1])
@@ -95,7 +91,6 @@ async def process_car_choice(callback: types.CallbackQuery, state: FSMContext):
         )
     await callback.answer()
 
-# Ввод даты окончания
 @router.message(AddInsurance.waiting_for_end_date)
 async def process_end_date(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
@@ -116,7 +111,6 @@ async def process_end_date(message: types.Message, state: FSMContext):
     except ValueError:
         await message.answer("❌ Неверный формат. Введите дату в формате ДД.ММ.ГГГГ (например, 31.12.2026)")
 
-# Ввод стоимости
 @router.message(AddInsurance.waiting_for_cost)
 async def process_cost(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
@@ -134,7 +128,6 @@ async def process_cost(message: types.Message, state: FSMContext):
     except ValueError:
         await message.answer("❌ Введите число (например, 25000)")
 
-# Ввод номера полиса
 @router.message(AddInsurance.waiting_for_policy)
 async def process_policy(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
@@ -149,7 +142,6 @@ async def process_policy(message: types.Message, state: FSMContext):
         reply_markup=get_cancel_keyboard()
     )
 
-# Ввод компании
 @router.message(AddInsurance.waiting_for_company)
 async def process_company(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
@@ -164,7 +156,6 @@ async def process_company(message: types.Message, state: FSMContext):
         reply_markup=get_cancel_keyboard()
     )
 
-# Ввод примечаний и сохранение
 @router.message(AddInsurance.waiting_for_notes)
 async def process_notes(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
@@ -172,17 +163,48 @@ async def process_notes(message: types.Message, state: FSMContext):
         await message.answer("❌ Добавление отменено", reply_markup=get_main_menu())
         return
     notes = message.text if message.text != "-" else None
+    await state.update_data(notes=notes)
+    # Переходим к фото
+    await state.set_state(AddInsurance.waiting_for_photo)
+    await message.answer(
+        "Теперь вы можете прикрепить фото чека или полиса (необязательно).",
+        reply_markup=types.ReplyKeyboardMarkup(
+            keyboard=[[types.KeyboardButton(text="⏭ Пропустить")]],
+            resize_keyboard=True
+        )
+    )
+
+@router.message(AddInsurance.waiting_for_photo, F.photo)
+async def process_insurance_photo(message: types.Message, state: FSMContext):
+    photo_id = message.photo[-1].file_id
+    await state.update_data(photo_id=photo_id)
+    await save_insurance(message, state)
+
+@router.message(AddInsurance.waiting_for_photo, F.text == "⏭ Пропустить")
+async def skip_insurance_photo(message: types.Message, state: FSMContext):
+    await state.update_data(photo_id=None)
+    await save_insurance(message, state)
+
+async def save_insurance(message: types.Message, state: FSMContext):
     data = await state.get_data()
+    car_id = data['car_id']
+    end_date = data['end_date']
+    cost = data['cost']
+    policy = data.get('policy')
+    company = data.get('company')
+    notes = data.get('notes')
+    photo_id = data.get('photo_id')
 
     with next(get_db()) as db:
         insurance = Insurance(
-            car_id=data['car_id'],
-            policy_number=data.get('policy'),
-            company=data.get('company'),
-            start_date=datetime.now(),  # можно позже добавить поле start_date
-            end_date=data['end_date'],
-            cost=data['cost'],
+            car_id=car_id,
+            policy_number=policy,
+            company=company,
+            start_date=datetime.now(),
+            end_date=end_date,
+            cost=cost,
             notes=notes,
+            photo_id=photo_id,
             notified_7d=False,
             notified_3d=False,
             notified_expired=False
@@ -190,20 +212,20 @@ async def process_notes(message: types.Message, state: FSMContext):
         db.add(insurance)
         db.commit()
 
-        car = db.query(Car).filter(Car.id == data['car_id']).first()
+        car = db.query(Car).filter(Car.id == car_id).first()
 
-        await message.answer(
-            f"✅ Страховка добавлена!\n\n"
-            f"Автомобиль: {car.brand} {car.model}\n"
-            f"Действует до: {data['end_date'].strftime('%d.%m.%Y')}\n"
-            f"Стоимость: {data['cost']:.2f} ₽\n"
-            f"Номер полиса: {data.get('policy', 'не указан')}\n"
-            f"Компания: {data.get('company', 'не указана')}",
-            reply_markup=get_main_menu()  # возвращаем главное меню
-        )
+    await message.answer(
+        f"✅ Страховка добавлена!\n\n"
+        f"Автомобиль: {car.brand} {car.model}\n"
+        f"Действует до: {end_date.strftime('%d.%m.%Y')}\n"
+        f"Стоимость: {cost:.2f} ₽\n"
+        f"Номер полиса: {policy or 'не указан'}\n"
+        f"Компания: {company or 'не указана'}",
+        reply_markup=get_main_menu()
+    )
     await state.clear()
 
-# Просмотр списка страховок
+# Просмотр списка страховок (без изменений)
 @router.message(F.text == "📄 Мои страховки")
 @router.message(Command("my_insurances"))
 async def show_insurances(message: types.Message):
@@ -239,5 +261,4 @@ async def show_insurances(message: types.Message):
                 response += "\n"
         if not found:
             response = "У вас пока нет добавленных страховок."
-
-        await message.answer(response, reply_markup=get_main_menu())  # после списка возвращаем главное меню
+        await message.answer(response, reply_markup=get_main_menu())
