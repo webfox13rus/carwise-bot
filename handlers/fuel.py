@@ -17,9 +17,9 @@ class AddFuel(StatesGroup):
     waiting_for_amount = State()
     waiting_for_cost = State()
     waiting_for_mileage = State()
-    waiting_for_fuel_type = State()  # новое состояние
+    waiting_for_fuel_type = State()
+    waiting_for_photo = State()  # новое состояние
 
-# Вспомогательная клавиатура выбора автомобиля
 def make_car_keyboard(cars):
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[])
     for car in cars:
@@ -130,62 +130,80 @@ async def process_fuel_mileage(message: types.Message, state: FSMContext):
 async def process_fuel_type(callback: types.CallbackQuery, state: FSMContext):
     fuel_type = callback.data.split("_")[-1]
     await state.update_data(fuel_type=fuel_type)
+    await state.set_state(AddFuel.waiting_for_photo)
+    await callback.message.edit_text(
+        "Теперь вы можете прикрепить фото чека (необязательно).\n"
+        "Отправьте фото или нажмите 'Пропустить'."
+    )
+    # Клавиатура с кнопкой "Пропустить"
+    keyboard = types.ReplyKeyboardMarkup(
+        keyboard=[[types.KeyboardButton(text="⏭ Пропустить")]],
+        resize_keyboard=True
+    )
+    await callback.message.answer(
+        "Если хотите добавить фото, отправьте его сейчас.",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
+@router.message(AddFuel.waiting_for_photo, F.photo)
+async def process_fuel_photo(message: types.Message, state: FSMContext):
+    # Берём file_id самого большого фото
+    photo_id = message.photo[-1].file_id
+    await state.update_data(photo_id=photo_id)
+    await save_fuel_event(message, state)
+
+@router.message(AddFuel.waiting_for_photo, F.text == "⏭ Пропустить")
+async def skip_fuel_photo(message: types.Message, state: FSMContext):
+    await state.update_data(photo_id=None)
+    await save_fuel_event(message, state)
+
+async def save_fuel_event(message: types.Message, state: FSMContext):
     data = await state.get_data()
     car_id = data['car_id']
     amount = data['amount']
     cost = data['cost']
     mileage = data['mileage']
+    fuel_type = data['fuel_type']
+    photo_id = data.get('photo_id')
+
     price_per_liter = cost / amount
 
-    # Получаем название типа топлива для вывода
-    fuel_name = config.DEFAULT_FUEL_TYPES.get(fuel_type, fuel_type)
-
     with next(get_db()) as db:
-        # Создаём событие заправки
         fuel_event = FuelEvent(
             car_id=car_id,
             liters=amount,
             cost=cost,
             mileage=mileage,
-            fuel_type=fuel_type
+            fuel_type=fuel_type,
+            photo_id=photo_id
         )
         db.add(fuel_event)
-        # Обновляем пробег автомобиля, если новый пробег больше текущего
         car = db.query(Car).filter(Car.id == car_id).first()
         if car and mileage > car.current_mileage:
             car.current_mileage = mileage
         db.commit()
 
-        # Расчёт расхода между последними двумя заправками
+        # Расчёт расхода
         consumption_info = ""
-        if car:
-            # Находим две последние заправки для этого авто (включая только что добавленную)
-            last_two = db.query(FuelEvent).filter(FuelEvent.car_id == car_id).order_by(FuelEvent.date.desc()).limit(2).all()
-            if len(last_two) == 2:
-                # Сортировка по возрастанию даты: старая первая
-                older, newer = sorted(last_two, key=lambda x: x.date)
-                if newer.mileage and older.mileage and newer.mileage > older.mileage:
-                    distance = newer.mileage - older.mileage
-                    if distance > 0:
-                        # Сумма литров между ними – это литры старой заправки? Нет, берём литры новой?
-                        # Правильнее: расход = (литры новой заправки) * 100 / пройденный путь
-                        # Но литры новой заправки были залиты после пробега, поэтому расход считается по последней заправке и пройденному пути с предыдущей.
-                        # Обычно формула: (литры / пробег) * 100, где пробег – разница между текущей и предыдущей заправками.
-                        consumption = (newer.liters / distance) * 100
-                        consumption_info = f"\n\n📊 Расход после предыдущей заправки: {consumption:.2f} л/100км"
+        last_two = db.query(FuelEvent).filter(FuelEvent.car_id == car_id).order_by(FuelEvent.date.desc()).limit(2).all()
+        if len(last_two) == 2:
+            older, newer = sorted(last_two, key=lambda x: x.date)
+            if newer.mileage and older.mileage and newer.mileage > older.mileage:
+                distance = newer.mileage - older.mileage
+                if distance > 0:
+                    consumption = (newer.liters / distance) * 100
+                    consumption_info = f"\n\n📊 Расход после предыдущей заправки: {consumption:.2f} л/100км"
 
-        await callback.message.edit_text(
-            f"✅ Заправка добавлена!\n\n"
-            f"Количество: {amount:.2f} л\n"
-            f"Сумма: {cost:.2f} ₽\n"
-            f"Цена за литр: {price_per_liter:.2f} ₽\n"
-            f"Пробег: {mileage:,.0f} км\n"
-            f"Тип топлива: {fuel_name}"
-            f"{consumption_info}"
-        )
-        await callback.message.answer(
-            "Главное меню:",
-            reply_markup=get_main_menu()
-        )
+    fuel_name = config.DEFAULT_FUEL_TYPES.get(fuel_type, fuel_type)
+    await message.answer(
+        f"✅ Заправка добавлена!\n\n"
+        f"Количество: {amount:.2f} л\n"
+        f"Сумма: {cost:.2f} ₽\n"
+        f"Цена за литр: {price_per_liter:.2f} ₽\n"
+        f"Пробег: {mileage:,.0f} км\n"
+        f"Тип топлива: {fuel_name}"
+        f"{consumption_info}",
+        reply_markup=get_main_menu()
+    )
     await state.clear()
-    await callback.answer()
