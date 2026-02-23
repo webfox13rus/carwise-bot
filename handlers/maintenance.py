@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime  # <-- добавлен недостающий импорт
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
