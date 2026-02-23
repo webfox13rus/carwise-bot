@@ -21,6 +21,7 @@ class AddMaintenance(StatesGroup):
     waiting_for_mileage = State()
     waiting_for_part_interval_mileage = State()
     waiting_for_part_interval_months = State()
+    waiting_for_photo = State()  # новое
 
 def make_car_keyboard(cars):
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[])
@@ -141,14 +142,6 @@ async def process_mileage(message: types.Message, state: FSMContext):
         cost = data['cost']
 
         with next(get_db()) as db:
-            maint_event = MaintenanceEvent(
-                car_id=car_id,
-                category=category,
-                description=description,
-                cost=cost,
-                mileage=mileage
-            )
-            db.add(maint_event)
             car = db.query(Car).filter(Car.id == car_id).first()
             if car and mileage > car.current_mileage:
                 car.current_mileage = mileage
@@ -158,11 +151,22 @@ async def process_mileage(message: types.Message, state: FSMContext):
                 car.last_maintenance_date = datetime.utcnow()
                 car.notified_to_mileage = False
                 car.notified_to_date = False
-                db.commit()
-            elif category == "parts" or category == "fluids":  # добавлена обработка жидкостей
-                # Сохраняем данные для Part
+                # Для ТО не спрашиваем фото? Можно спросить, но пока пропустим.
+                # Временно сохраняем событие и переходим к фото
                 await state.update_data(part_mileage=mileage, part_date=datetime.utcnow())
-                db.commit()  # сохраняем событие обслуживания
+                db.commit()
+                await state.set_state(AddMaintenance.waiting_for_photo)
+                await message.answer(
+                    "Теперь вы можете прикрепить фото чека (необязательно).",
+                    reply_markup=types.ReplyKeyboardMarkup(
+                        keyboard=[[types.KeyboardButton(text="⏭ Пропустить")]],
+                        resize_keyboard=True
+                    )
+                )
+                return
+            elif category == "parts" or category == "fluids":
+                await state.update_data(part_mileage=mileage, part_date=datetime.utcnow())
+                db.commit()
                 await state.set_state(AddMaintenance.waiting_for_part_interval_mileage)
                 await message.answer(
                     "Укажите интервал замены этого элемента по пробегу (в км).\n"
@@ -170,18 +174,18 @@ async def process_mileage(message: types.Message, state: FSMContext):
                 )
                 return
             else:
+                # Другие категории: сохраняем событие и переходим к фото
+                await state.update_data(part_mileage=mileage, part_date=datetime.utcnow())
                 db.commit()
-
-        category_name = config.MAINTENANCE_CATEGORIES.get(category, category)
-        await message.answer(
-            f"✅ Обслуживание добавлено!\n\n"
-            f"Категория: {category_name}\n"
-            f"{description}\n"
-            f"Стоимость: {cost:.2f} ₽\n"
-            f"Пробег: {mileage:,.0f} км",
-            reply_markup=get_main_menu()
-        )
-        await state.clear()
+                await state.set_state(AddMaintenance.waiting_for_photo)
+                await message.answer(
+                    "Теперь вы можете прикрепить фото чека (необязательно).",
+                    reply_markup=types.ReplyKeyboardMarkup(
+                        keyboard=[[types.KeyboardButton(text="⏭ Пропустить")]],
+                        resize_keyboard=True
+                    )
+                )
+                return
     except ValueError:
         await message.answer("❌ Введите число (например, 150000)")
 
@@ -227,7 +231,6 @@ async def process_part_interval_months(message: types.Message, state: FSMContext
         interval_months = interval_months if interval_months > 0 else None
 
         with next(get_db()) as db:
-            # Ищем существующую деталь с таким же именем для этого авто
             part = db.query(Part).filter(
                 Part.car_id == car_id,
                 Part.name == description
@@ -251,12 +254,58 @@ async def process_part_interval_months(message: types.Message, state: FSMContext
                 db.add(part)
             db.commit()
 
+        # После создания детали переходим к фото
+        await state.set_state(AddMaintenance.waiting_for_photo)
         await message.answer(
-            f"✅ Элемент '{description}' добавлен с напоминаниями!\n"
-            f"Интервал по пробегу: {interval_mileage if interval_mileage else 'не установлен'} км\n"
-            f"Интервал по времени: {interval_months if interval_months else 'не установлен'} мес.",
-            reply_markup=get_main_menu()
+            "Теперь вы можете прикрепить фото чека (необязательно).",
+            reply_markup=types.ReplyKeyboardMarkup(
+                keyboard=[[types.KeyboardButton(text="⏭ Пропустить")]],
+                resize_keyboard=True
+            )
         )
-        await state.clear()
     except ValueError:
         await message.answer("❌ Введите целое число (например, 12)")
+
+# Обработка фото для обслуживания
+@router.message(AddMaintenance.waiting_for_photo, F.photo)
+async def process_maintenance_photo(message: types.Message, state: FSMContext):
+    photo_id = message.photo[-1].file_id
+    await state.update_data(photo_id=photo_id)
+    await save_maintenance_event(message, state)
+
+@router.message(AddMaintenance.waiting_for_photo, F.text == "⏭ Пропустить")
+async def skip_maintenance_photo(message: types.Message, state: FSMContext):
+    await state.update_data(photo_id=None)
+    await save_maintenance_event(message, state)
+
+async def save_maintenance_event(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    car_id = data['car_id']
+    category = data['category']
+    description = data['description']
+    cost = data['cost']
+    mileage = data.get('mileage') or data.get('part_mileage')
+    photo_id = data.get('photo_id')
+
+    with next(get_db()) as db:
+        maint_event = MaintenanceEvent(
+            car_id=car_id,
+            category=category,
+            description=description,
+            cost=cost,
+            mileage=mileage,
+            photo_id=photo_id
+        )
+        db.add(maint_event)
+        db.commit()
+
+    category_name = config.MAINTENANCE_CATEGORIES.get(category, category)
+    await message.answer(
+        f"✅ Обслуживание добавлено!\n\n"
+        f"Категория: {category_name}\n"
+        f"{description}\n"
+        f"Стоимость: {cost:.2f} ₽\n"
+        f"Пробег: {mileage:,.0f} км",
+        reply_markup=get_main_menu()
+    )
+    await state.clear()
