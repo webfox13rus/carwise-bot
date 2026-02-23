@@ -19,7 +19,6 @@ class AddMaintenance(StatesGroup):
     waiting_for_description = State()
     waiting_for_cost = State()
     waiting_for_mileage = State()
-    # новые состояния для запчастей
     waiting_for_part_interval_mileage = State()
     waiting_for_part_interval_months = State()
 
@@ -159,13 +158,14 @@ async def process_mileage(message: types.Message, state: FSMContext):
                 car.last_maintenance_date = datetime.utcnow()
                 car.notified_to_mileage = False
                 car.notified_to_date = False
-            elif category == "parts":
-                # Если это запчасть, переходим к запросу интервалов, но сначала сохраним данные
+                db.commit()
+            elif category == "parts" or category == "fluids":  # добавлена обработка жидкостей
+                # Сохраняем данные для Part
                 await state.update_data(part_mileage=mileage, part_date=datetime.utcnow())
                 db.commit()  # сохраняем событие обслуживания
                 await state.set_state(AddMaintenance.waiting_for_part_interval_mileage)
                 await message.answer(
-                    "Укажите интервал замены этой детали по пробегу (в км).\n"
+                    "Укажите интервал замены этого элемента по пробегу (в км).\n"
                     "Если интервал не нужен, отправьте 0:"
                 )
                 return
@@ -185,7 +185,7 @@ async def process_mileage(message: types.Message, state: FSMContext):
     except ValueError:
         await message.answer("❌ Введите число (например, 150000)")
 
-# Обработка интервала по пробегу для запчасти
+# Обработка интервала по пробегу для запчасти/жидкости
 @router.message(AddMaintenance.waiting_for_part_interval_mileage)
 async def process_part_interval_mileage(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
@@ -206,7 +206,7 @@ async def process_part_interval_mileage(message: types.Message, state: FSMContex
     except ValueError:
         await message.answer("❌ Введите число (например, 10000)")
 
-# Обработка интервала по времени для запчасти и создание записи Part
+# Обработка интервала по времени и создание записи Part
 @router.message(AddMaintenance.waiting_for_part_interval_months)
 async def process_part_interval_months(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
@@ -233,14 +233,12 @@ async def process_part_interval_months(message: types.Message, state: FSMContext
                 Part.name == description
             ).first()
             if part:
-                # Обновляем
                 part.last_mileage = part_mileage
                 part.last_date = part_date
                 part.interval_mileage = interval_mileage
                 part.interval_months = interval_months
                 part.notified = False
             else:
-                # Создаём новую
                 part = Part(
                     car_id=car_id,
                     name=description,
@@ -254,7 +252,7 @@ async def process_part_interval_months(message: types.Message, state: FSMContext
             db.commit()
 
         await message.answer(
-            f"✅ Деталь '{description}' добавлена с напоминаниями!\n"
+            f"✅ Элемент '{description}' добавлен с напоминаниями!\n"
             f"Интервал по пробегу: {interval_mileage if interval_mileage else 'не установлен'} км\n"
             f"Интервал по времени: {interval_months if interval_months else 'не установлен'} мес.",
             reply_markup=get_main_menu()
