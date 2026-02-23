@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup  # <-- добавлен недостающий импорт
 from sqlalchemy import func
 
 from states.car_states import AddCarStates, MileageUpdateStates
@@ -115,20 +116,17 @@ async def add_car_start(message: types.Message, state: FSMContext):
     with next(get_db()) as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
-            # Если пользователя нет, создаём
             user = User(
                 telegram_id=message.from_user.id,
                 username=message.from_user.username,
                 first_name=message.from_user.first_name,
                 last_name=message.from_user.last_name,
-                is_premium=False  # по умолчанию не премиум
+                is_premium=False
             )
             db.add(user)
             db.commit()
 
-        # Подсчитываем количество активных авто
         car_count = db.query(Car).filter(Car.user_id == user.id, Car.is_active == True).count()
-        # Если у пользователя уже есть автомобиль и он не премиум, блокируем добавление второго
         if car_count >= 1 and not user.is_premium:
             await message.answer(
                 "❌ *Добавление второго автомобиля* – платная функция.\n\n"
@@ -139,7 +137,6 @@ async def add_car_start(message: types.Message, state: FSMContext):
             )
             return
 
-        # Если всё хорошо, начинаем процесс добавления
         await state.set_state(AddCarStates.waiting_for_brand)
         keyboard = make_inline_keyboard(CAR_BRANDS, "brand")
         await message.answer(
