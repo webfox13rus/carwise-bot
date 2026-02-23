@@ -1,12 +1,12 @@
 import logging
-from datetime import datetime  # <-- добавлен недостающий импорт
+from datetime import datetime
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy import func
 
-from database import get_db, Car, MaintenanceEvent, User
+from database import get_db, Car, MaintenanceEvent, User, Part
 from keyboards.main_menu import get_main_menu, get_cancel_keyboard
 from config import config
 
@@ -19,6 +19,9 @@ class AddMaintenance(StatesGroup):
     waiting_for_description = State()
     waiting_for_cost = State()
     waiting_for_mileage = State()
+    # новые состояния для запчастей
+    waiting_for_part_interval_mileage = State()
+    waiting_for_part_interval_months = State()
 
 def make_car_keyboard(cars):
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[])
@@ -151,15 +154,23 @@ async def process_mileage(message: types.Message, state: FSMContext):
             if car and mileage > car.current_mileage:
                 car.current_mileage = mileage
 
-            # Если это событие категории "ТО", обновляем дату и пробег последнего ТО
             if category == "to":
                 car.last_maintenance_mileage = mileage
                 car.last_maintenance_date = datetime.utcnow()
-                # Сбрасываем флаги уведомлений для нового цикла
                 car.notified_to_mileage = False
                 car.notified_to_date = False
-
-            db.commit()
+            elif category == "parts":
+                # Если это запчасть, переходим к запросу интервалов, но сначала сохраним данные
+                await state.update_data(part_mileage=mileage, part_date=datetime.utcnow())
+                db.commit()  # сохраняем событие обслуживания
+                await state.set_state(AddMaintenance.waiting_for_part_interval_mileage)
+                await message.answer(
+                    "Укажите интервал замены этой детали по пробегу (в км).\n"
+                    "Если интервал не нужен, отправьте 0:"
+                )
+                return
+            else:
+                db.commit()
 
         category_name = config.MAINTENANCE_CATEGORIES.get(category, category)
         await message.answer(
@@ -173,3 +184,81 @@ async def process_mileage(message: types.Message, state: FSMContext):
         await state.clear()
     except ValueError:
         await message.answer("❌ Введите число (например, 150000)")
+
+# Обработка интервала по пробегу для запчасти
+@router.message(AddMaintenance.waiting_for_part_interval_mileage)
+async def process_part_interval_mileage(message: types.Message, state: FSMContext):
+    if message.text == "❌ Отмена":
+        await state.clear()
+        await message.answer("❌ Добавление отменено", reply_markup=get_main_menu())
+        return
+    try:
+        interval_mileage = float(message.text.replace(',', '.'))
+        if interval_mileage < 0:
+            await message.answer("❌ Интервал не может быть отрицательным. Введите число >=0:")
+            return
+        await state.update_data(part_interval_mileage=interval_mileage if interval_mileage > 0 else None)
+        await state.set_state(AddMaintenance.waiting_for_part_interval_months)
+        await message.answer(
+            "Укажите интервал замены по времени (в месяцах).\n"
+            "Если интервал не нужен, отправьте 0:"
+        )
+    except ValueError:
+        await message.answer("❌ Введите число (например, 10000)")
+
+# Обработка интервала по времени для запчасти и создание записи Part
+@router.message(AddMaintenance.waiting_for_part_interval_months)
+async def process_part_interval_months(message: types.Message, state: FSMContext):
+    if message.text == "❌ Отмена":
+        await state.clear()
+        await message.answer("❌ Добавление отменено", reply_markup=get_main_menu())
+        return
+    try:
+        interval_months = int(message.text)
+        if interval_months < 0:
+            await message.answer("❌ Интервал не может быть отрицательным. Введите целое число >=0:")
+            return
+        data = await state.get_data()
+        car_id = data['car_id']
+        description = data['description']
+        part_mileage = data['part_mileage']
+        part_date = data['part_date']
+        interval_mileage = data.get('part_interval_mileage')
+        interval_months = interval_months if interval_months > 0 else None
+
+        with next(get_db()) as db:
+            # Ищем существующую деталь с таким же именем для этого авто
+            part = db.query(Part).filter(
+                Part.car_id == car_id,
+                Part.name == description
+            ).first()
+            if part:
+                # Обновляем
+                part.last_mileage = part_mileage
+                part.last_date = part_date
+                part.interval_mileage = interval_mileage
+                part.interval_months = interval_months
+                part.notified = False
+            else:
+                # Создаём новую
+                part = Part(
+                    car_id=car_id,
+                    name=description,
+                    last_mileage=part_mileage,
+                    last_date=part_date,
+                    interval_mileage=interval_mileage,
+                    interval_months=interval_months,
+                    notified=False
+                )
+                db.add(part)
+            db.commit()
+
+        await message.answer(
+            f"✅ Деталь '{description}' добавлена с напоминаниями!\n"
+            f"Интервал по пробегу: {interval_mileage if interval_mileage else 'не установлен'} км\n"
+            f"Интервал по времени: {interval_months if interval_months else 'не установлен'} мес.",
+            reply_markup=get_main_menu()
+        )
+        await state.clear()
+    except ValueError:
+        await message.answer("❌ Введите целое число (например, 12)")
