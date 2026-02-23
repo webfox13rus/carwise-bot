@@ -11,6 +11,7 @@ import os
 from config import config
 from database import init_db, SessionLocal, Insurance, Car, User, Part
 # Импортируем все роутеры (обработчики команд)
+from handlers.export import router as export_router
 from handlers.start import router as start_router
 from handlers.cars import router as cars_router
 from handlers.fuel import router as fuel_router
@@ -221,6 +222,7 @@ async def main():
     dp.include_router(insurance_router)      # страховки
     dp.include_router(reminders_router)      # настройка напоминаний ТО
     dp.include_router(parts_router)          # отчёт по деталям (кнопка "🔧 Детали")
+    dp.include_router(export_router)
 
     # Удаляем возможный вебхук (чтобы не мешал поллингу)
     await bot.delete_webhook(drop_pending_updates=True)
