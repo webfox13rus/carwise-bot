@@ -7,10 +7,13 @@ from config import config
 router = Router()
 logger = logging.getLogger(__name__)
 
-@router.message(F.chat.id == config.FEEDBACK_CHAT_ID)
+# ВНИМАНИЕ: для отладки временно убрали фильтр по chat_id, чтобы видеть все сообщения
+# После определения правильного ID можно будет вернуть фильтр обратно
+@router.message()
 async def handle_feedback_reply(message: types.Message):
-    logger.info(f"🔥 Получено сообщение в канале от {message.from_user.id}: {message.text} (reply_to={bool(message.reply_to_message)})")
+    logger.info(f"🔥 [DEBUG] Получено сообщение в чате {message.chat.id} от {message.from_user.id}: {message.text} (reply_to={bool(message.reply_to_message)})")
     
+    # Проверяем, что это ответ на сообщение бота
     if not message.reply_to_message:
         logger.info("Не ответ, игнорируем")
         return
