@@ -7,9 +7,9 @@ from keyboards.main_menu import (
     get_fuel_submenu,
     get_maintenance_submenu,
     get_insurance_submenu,
-    get_more_submenu
+    get_more_submenu,
+    get_stats_submenu  # импортируем новую клавиатуру
 )
-from handlers.reports import show_stats  # импортируем функцию статистики
 
 router = Router()
 
@@ -33,12 +33,11 @@ async def go_to_insurance(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer("Управление страховками:", reply_markup=get_insurance_submenu())
 
-# Исправленная обработка статистики – сразу показываем отчёт
+# Изменено: теперь ведёт в подменю статистики
 @router.message(F.text == "📊 Статистика")
-async def go_to_stats(message: types.Message, state: FSMContext):
+async def go_to_stats_menu(message: types.Message, state: FSMContext):
     await state.clear()
-    # Вызываем функцию показа статистики напрямую
-    await show_stats(message)
+    await message.answer("Выберите формат статистики:", reply_markup=get_stats_submenu())
 
 @router.message(F.text == "⚙️ Ещё")
 async def go_to_more(message: types.Message, state: FSMContext):
