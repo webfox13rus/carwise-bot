@@ -34,33 +34,49 @@ async def process_feedback(message: types.Message, state: FSMContext):
         await message.answer("❌ Сообщение отменено", reply_markup=get_more_submenu())
         return
 
-    # Проверяем, есть ли администраторы
-    if not config.ADMIN_IDS:
-        await message.answer("❌ Ошибка: администратор не настроен. Сообщение не отправлено.")
-        await state.clear()
-        return
-
-    admin_id = config.ADMIN_IDS[0]  # берём первого администратора
-    user_info = f"Пользователь: {message.from_user.full_name}"
+    # Формируем информацию о пользователе
+    user_info = f"От пользователя: {message.from_user.full_name}"
     if message.from_user.username:
         user_info += f" (@{message.from_user.username})"
     user_info += f"\nID: {message.from_user.id}"
+    user_info += f"\n\n*Текст:*\n{message.text}"
 
-    try:
-        await message.bot.send_message(
-            admin_id,
-            f"📩 *Новое сообщение от пользователя*\n\n"
-            f"{user_info}\n\n"
-            f"*Текст:*\n{message.text}",
-            parse_mode="Markdown"
-        )
-        await message.answer(
-            "✅ Ваше сообщение отправлено администратору. Он ответит вам в ближайшее время.",
-            reply_markup=get_more_submenu()
-        )
-    except Exception as e:
-        logger.error(f"Ошибка отправки сообщения администратору: {e}")
-        await message.answer("❌ Произошла ошибка при отправке. Попробуйте позже.")
+    # Если задан канал обратной связи, отправляем туда
+    if config.FEEDBACK_CHAT_ID:
+        try:
+            await message.bot.send_message(
+                config.FEEDBACK_CHAT_ID,
+                user_info,
+                parse_mode="Markdown"
+            )
+            await message.answer(
+                "✅ Ваше сообщение отправлено администратору. Ответ придёт в этот чат.",
+                reply_markup=get_more_submenu()
+            )
+        except Exception as e:
+            logger.error(f"Ошибка отправки в канал: {e}")
+            await message.answer("❌ Произошла ошибка при отправке. Попробуйте позже.")
+    else:
+        # Если канал не задан, отправляем первому администратору в ЛС (старый вариант)
+        if not config.ADMIN_IDS:
+            await message.answer("❌ Ошибка: администратор не настроен. Сообщение не отправлено.")
+            await state.clear()
+            return
+
+        admin_id = config.ADMIN_IDS[0]
+        try:
+            await message.bot.send_message(
+                admin_id,
+                f"📩 *Новое сообщение от пользователя*\n\n{user_info}",
+                parse_mode="Markdown"
+            )
+            await message.answer(
+                "✅ Ваше сообщение отправлено администратору. Он ответит вам в ближайшее время.",
+                reply_markup=get_more_submenu()
+            )
+        except Exception as e:
+            logger.error(f"Ошибка отправки администратору: {e}")
+            await message.answer("❌ Произошла ошибка при отправке. Попробуйте позже.")
 
     await state.clear()
 
