@@ -127,20 +127,28 @@ async def show_detailed_stats(message: types.Message):
 
             # Информация о следующем ТО
             next_to_parts = []
-            if car.to_mileage_interval and car.last_maintenance_mileage is not None:
-                next_mileage = car.last_maintenance_mileage + car.to_mileage_interval
-                if car.current_mileage >= next_mileage:
-                    next_to_parts.append("⚠️ по пробегу (нужно ТО!)")
+            if car.to_mileage_interval:
+                if car.last_maintenance_mileage is not None:
+                    next_mileage = car.last_maintenance_mileage + car.to_mileage_interval
+                    if car.current_mileage >= next_mileage:
+                        next_to_parts.append("⚠️ по пробегу (нужно ТО!)")
+                    else:
+                        remaining_km = next_mileage - car.current_mileage
+                        next_to_parts.append(f"по пробегу через {remaining_km:,.0f} км")
                 else:
-                    remaining_km = next_mileage - car.current_mileage
-                    next_to_parts.append(f"по пробегу через {remaining_km:,.0f} км")
-            if car.to_months_interval and car.last_maintenance_date is not None:
-                next_date = car.last_maintenance_date + timedelta(days=30 * car.to_months_interval)
-                days_left = (next_date.date() - datetime.now().date()).days
-                if days_left <= 0:
-                    next_to_parts.append("⚠️ по дате (нужно ТО!)")
+                    next_to_parts.append("по пробегу (нет данных о последнем ТО)")
+            
+            if car.to_months_interval:
+                if car.last_maintenance_date is not None:
+                    next_date = car.last_maintenance_date + timedelta(days=30 * car.to_months_interval)
+                    days_left = (next_date.date() - datetime.now().date()).days
+                    if days_left <= 0:
+                        next_to_parts.append("⚠️ по дате (нужно ТО!)")
+                    else:
+                        next_to_parts.append(f"по дате через {days_left} дн.")
                 else:
-                    next_to_parts.append(f"по дате через {days_left} дн.")
+                    next_to_parts.append("по времени (нет даты последнего ТО)")
+            
             if next_to_parts:
                 response_lines.append(f"⏰ *Следующее ТО:* {', '.join(next_to_parts)}")
             else:
@@ -185,3 +193,4 @@ async def show_detailed_stats(message: types.Message):
 
         full_response = "\n".join(response_lines)
         await message.answer(full_response, parse_mode="Markdown", reply_markup=get_stats_submenu())
+
