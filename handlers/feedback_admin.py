@@ -7,13 +7,11 @@ from config import config
 router = Router()
 logger = logging.getLogger(__name__)
 
-# ВНИМАНИЕ: для отладки временно убрали фильтр по chat_id, чтобы видеть все сообщения
-# После определения правильного ID можно будет вернуть фильтр обратно
-@router.message()
+# Фильтр только на вашу группу (ID из лога)
+@router.message(F.chat.id == config.FEEDBACK_CHAT_ID)
 async def handle_feedback_reply(message: types.Message):
-    logger.info(f"🔥 [DEBUG] Получено сообщение в чате {message.chat.id} от {message.from_user.id}: {message.text} (reply_to={bool(message.reply_to_message)})")
+    logger.info(f"Получено сообщение в группе {message.chat.id} от {message.from_user.id}: {message.text}")
     
-    # Проверяем, что это ответ на сообщение бота
     if not message.reply_to_message:
         logger.info("Не ответ, игнорируем")
         return
@@ -27,11 +25,11 @@ async def handle_feedback_reply(message: types.Message):
         logger.info("Ответ не на сообщение бота")
         return
 
-    # Извлекаем ID пользователя из текста оригинального сообщения
+    # Извлекаем ID пользователя
     original_text = original.text or original.caption or ""
     match = re.search(r'ID:\s*(\d+)', original_text)
     if not match:
-        logger.warning("ID пользователя не найден в оригинальном сообщении")
+        logger.warning("ID пользователя не найден")
         await message.reply("❌ Не удалось определить ID пользователя.")
         return
 
