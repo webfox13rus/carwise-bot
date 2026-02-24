@@ -299,11 +299,3 @@ async def save_maintenance_event(message: types.Message, state: FSMContext):
         reply_markup=get_maintenance_submenu()
     )
     await state.clear()
-
-# Плановые замены (команда /parts уже есть в отдельном файле, но добавим для совместимости)
-@router.message(F.text == "🔧 Плановые замены")
-@router.message(Command("parts"))
-async def show_parts(message: types.Message):
-    # Импортируем функцию из parts.py или реализуем здесь
-    # Для простоты оставим, что будет перехвачено parts.py, но если нет – реализуем
-    await message.answer("Используйте команду /parts")
