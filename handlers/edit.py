@@ -72,6 +72,14 @@ def make_events_keyboard(events, action_prefix, event_type):
         ])
     return keyboard
 
+def get_category_keyboard():
+    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[])
+    for code, name in config.MAINTENANCE_CATEGORIES.items():
+        keyboard.inline_keyboard.append([
+            types.InlineKeyboardButton(text=name, callback_data=f"edit_maint_cat_{code}")
+        ])
+    return keyboard
+
 # ------------------- Главное меню редактирования -------------------
 @router.message(F.text == "✏️ Редактировать запись")
 @router.message(Command("edit"))
@@ -191,15 +199,17 @@ async def edit_fuel_mileage(message: types.Message, state: FSMContext):
     except ValueError:
         await message.answer("❌ Введите число (например, 150000)")
 
+# ИСПРАВЛЕНО: теперь отправляем новое сообщение с кнопкой "Пропустить"
 @router.callback_query(EditFuel.waiting_for_fuel_type, F.data.startswith("fuel_type_"))
 async def edit_fuel_type(callback: types.CallbackQuery, state: FSMContext):
     fuel_type = callback.data.split("_")[-1]
     await state.update_data(fuel_type=fuel_type)
     await state.set_state(EditFuel.waiting_for_photo)
-    await callback.message.edit_text(
-        "Отправьте новое фото чека (или нажмите 'Пропустить'):"
-    )
+    # Удаляем сообщение с inline-кнопками
+    await callback.message.delete()
+    # Отправляем новое сообщение с reply-клавиатурой
     await callback.message.answer(
+        "Отправьте новое фото чека (или нажмите кнопку 'Пропустить'):",
         reply_markup=types.ReplyKeyboardMarkup(
             keyboard=[[types.KeyboardButton(text="⏭ Пропустить")]],
             resize_keyboard=True
@@ -241,7 +251,7 @@ async def save_edited_fuel(message: types.Message, state: FSMContext):
             event.mileage = new_mileage
         if new_fuel_type:
             event.fuel_type = new_fuel_type
-        if new_photo is not None:  # можно удалить фото, отправив None?
+        if new_photo is not None:
             event.photo_id = new_photo if new_photo else None
         db.commit()
 
@@ -297,17 +307,9 @@ async def edit_maint_event_callback(callback: types.CallbackQuery, state: FSMCon
     await state.set_state(EditMaintenance.waiting_for_category)
     await callback.message.edit_text(
         "Выберите новую категорию (или отправьте '0' для пропуска):",
-        reply_markup=get_category_keyboard()  # используем существующую клавиатуру категорий
+        reply_markup=get_category_keyboard()
     )
     await callback.answer()
-
-def get_category_keyboard():
-    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[])
-    for code, name in config.MAINTENANCE_CATEGORIES.items():
-        keyboard.inline_keyboard.append([
-            types.InlineKeyboardButton(text=name, callback_data=f"edit_maint_cat_{code}")
-        ])
-    return keyboard
 
 @router.callback_query(EditMaintenance.waiting_for_category, F.data.startswith("edit_maint_cat_"))
 async def edit_maint_category(callback: types.CallbackQuery, state: FSMContext):
@@ -361,8 +363,11 @@ async def edit_maint_mileage(message: types.Message, state: FSMContext):
         mileage = float(message.text.replace(',', '.')) if message.text != "0" else None
         await state.update_data(mileage=mileage)
         await state.set_state(EditMaintenance.waiting_for_photo)
+        # ИСПРАВЛЕНО: удаляем предыдущее сообщение и отправляем новое с кнопкой
+        # Здесь предыдущее сообщение — это то, которое содержало запрос пробега (текстовое), его удалять не обязательно
+        # Но чтобы не плодить, отправим новое сообщение с клавиатурой
         await message.answer(
-            "Отправьте новое фото чека (или нажмите 'Пропустить'):",
+            "Отправьте новое фото чека (или нажмите кнопку 'Пропустить'):",
             reply_markup=types.ReplyKeyboardMarkup(
                 keyboard=[[types.KeyboardButton(text="⏭ Пропустить")]],
                 resize_keyboard=True
@@ -539,8 +544,9 @@ async def edit_ins_notes(message: types.Message, state: FSMContext):
     notes = message.text if message.text != "0" else None
     await state.update_data(notes=notes)
     await state.set_state(EditInsurance.waiting_for_photo)
+    # ИСПРАВЛЕНО: отправляем новое сообщение с кнопкой
     await message.answer(
-        "Отправьте новое фото чека (или нажмите 'Пропустить'):",
+        "Отправьте новое фото чека (или нажмите кнопку 'Пропустить'):",
         reply_markup=types.ReplyKeyboardMarkup(
             keyboard=[[types.KeyboardButton(text="⏭ Пропустить")]],
             resize_keyboard=True
