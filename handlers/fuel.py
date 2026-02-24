@@ -6,7 +6,7 @@ from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy import func
 
 from database import get_db, Car, FuelEvent, User
-from keyboards.main_menu import get_main_menu, get_cancel_keyboard, get_fuel_types_keyboard
+from keyboards.main_menu import get_main_menu, get_fuel_submenu, get_cancel_keyboard, get_fuel_types_keyboard
 from config import config
 
 router = Router()
@@ -18,7 +18,7 @@ class AddFuel(StatesGroup):
     waiting_for_cost = State()
     waiting_for_mileage = State()
     waiting_for_fuel_type = State()
-    waiting_for_photo = State()  # новое состояние
+    waiting_for_photo = State()
 
 def make_car_keyboard(cars):
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[])
@@ -31,7 +31,12 @@ def make_car_keyboard(cars):
         ])
     return keyboard
 
-@router.message(F.text == "⛽ Заправка")
+@router.message(F.text == "⛽ Заправки")
+async def fuel_menu(message: types.Message, state: FSMContext):
+    await state.clear()
+    await message.answer("Управление заправками:", reply_markup=get_fuel_submenu())
+
+@router.message(F.text == "⛽ Добавить заправку")
 @router.message(Command("fuel"))
 async def add_fuel_start(message: types.Message, state: FSMContext):
     with next(get_db()) as db:
@@ -78,7 +83,7 @@ async def process_car_choice(callback: types.CallbackQuery, state: FSMContext):
 async def process_fuel_amount(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Добавление отменено", reply_markup=get_main_menu())
+        await message.answer("❌ Добавление отменено", reply_markup=get_fuel_submenu())
         return
     try:
         amount = float(message.text.replace(',', '.'))
@@ -96,7 +101,7 @@ async def process_fuel_amount(message: types.Message, state: FSMContext):
 async def process_fuel_cost(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Добавление отменено", reply_markup=get_main_menu())
+        await message.answer("❌ Добавление отменено", reply_markup=get_fuel_submenu())
         return
     try:
         cost = float(message.text.replace(',', '.'))
@@ -113,7 +118,7 @@ async def process_fuel_cost(message: types.Message, state: FSMContext):
 async def process_fuel_mileage(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Добавление отменено", reply_markup=get_main_menu())
+        await message.answer("❌ Добавление отменено", reply_markup=get_fuel_submenu())
         return
     try:
         mileage = float(message.text.replace(',', '.'))
@@ -131,24 +136,18 @@ async def process_fuel_type(callback: types.CallbackQuery, state: FSMContext):
     fuel_type = callback.data.split("_")[-1]
     await state.update_data(fuel_type=fuel_type)
     await state.set_state(AddFuel.waiting_for_photo)
-    await callback.message.edit_text(
-        "Теперь вы можете прикрепить фото чека (необязательно).\n"
-        "Отправьте фото или нажмите 'Пропустить'."
-    )
-    # Клавиатура с кнопкой "Пропустить"
-    keyboard = types.ReplyKeyboardMarkup(
-        keyboard=[[types.KeyboardButton(text="⏭ Пропустить")]],
-        resize_keyboard=True
-    )
+    await callback.message.delete()
     await callback.message.answer(
-        "Если хотите добавить фото, отправьте его сейчас.",
-        reply_markup=keyboard
+        "Отправьте новое фото чека (или нажмите кнопку 'Пропустить'):",
+        reply_markup=types.ReplyKeyboardMarkup(
+            keyboard=[[types.KeyboardButton(text="⏭ Пропустить")]],
+            resize_keyboard=True
+        )
     )
     await callback.answer()
 
 @router.message(AddFuel.waiting_for_photo, F.photo)
 async def process_fuel_photo(message: types.Message, state: FSMContext):
-    # Берём file_id самого большого фото
     photo_id = message.photo[-1].file_id
     await state.update_data(photo_id=photo_id)
     await save_fuel_event(message, state)
@@ -184,9 +183,8 @@ async def save_fuel_event(message: types.Message, state: FSMContext):
             car.current_mileage = mileage
         db.commit()
 
-        # Расчёт расхода
-        consumption_info = ""
         last_two = db.query(FuelEvent).filter(FuelEvent.car_id == car_id).order_by(FuelEvent.date.desc()).limit(2).all()
+        consumption_info = ""
         if len(last_two) == 2:
             older, newer = sorted(last_two, key=lambda x: x.date)
             if newer.mileage and older.mileage and newer.mileage > older.mileage:
@@ -204,6 +202,22 @@ async def save_fuel_event(message: types.Message, state: FSMContext):
         f"Пробег: {mileage:,.0f} км\n"
         f"Тип топлива: {fuel_name}"
         f"{consumption_info}",
-        reply_markup=get_main_menu()
+        reply_markup=get_fuel_submenu()
     )
     await state.clear()
+
+# Быстрая заправка
+@router.message(F.text.regexp(r'^(\d+)\s+(\d+(?:\.\d+)?)$'))
+async def quick_fuel(message: types.Message):
+    parts = message.text.split()
+    cost = float(parts[0])
+    liters = float(parts[1])
+    price = cost / liters
+    
+    await message.answer(
+        f"⛽ *Заправка добавлена!*\n\n"
+        f"Сумма: *{cost} ₽*\n"
+        f"Литры: *{liters} л*\n"
+        f"Цена за литр: *{price:.2f} ₽*",
+        parse_mode="Markdown"
+    )
