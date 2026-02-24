@@ -178,9 +178,9 @@ async def save_fuel_event(message: types.Message, state: FSMContext):
             car.current_mileage = mileage
         db.commit()
 
-        # Расчёт расхода
-        consumption_info = ""
+        # Расчёт расхода (если есть две заправки)
         last_two = db.query(FuelEvent).filter(FuelEvent.car_id == car_id).order_by(FuelEvent.date.desc()).limit(2).all()
+        consumption_info = ""
         if len(last_two) == 2:
             older, newer = sorted(last_two, key=lambda x: x.date)
             if newer.mileage and older.mileage and newer.mileage > older.mileage:
@@ -191,27 +191,7 @@ async def save_fuel_event(message: types.Message, state: FSMContext):
 
     fuel_name = config.DEFAULT_FUEL_TYPES.get(fuel_type, fuel_type)
     await message.answer(
-        f"✅ Заправка добавлена!\n newer.mileage > older.mileage:
-                distance = newer.mileage - older.mileage
-                if distance > 0:
-                    consumption = (newer.liters / distance) * 100
-                    consumption_info = f"\n\n📊 Расход после предыдущей заправки: {consumption:.2f} л/100км"
-
-    fuel_name = config.DEFAULT_FUEL_TYPES.get(fuel_type, fuel_type)
-    await message.answer(
         f"✅ Заправка добавлена!\n\n"
-        f"Количество: {amount:.2f} л\n"
-        f"Сумма: {cost:.2f} ₽\n"
-        f"Цена за литр: {price_per_liter:.2f} ₽\n"
-        f"Пробег: {mileage:,.0f} км\n"
-        f"Тип топлива: {fuel_name}"
-        f"{consumption_info}",
-        reply_markup=get_fuel_submenu()
-    )
-    await state.clear()
-
-# Быстрая заправка (по тексту)
-@router.message(F.text.regexp(r'^(\\n"
         f"Количество: {amount:.2f} л\n"
         f"Сумма: {cost:.2f} ₽\n"
         f"Цена за литр: {price_per_liter:.2f} ₽\n"
