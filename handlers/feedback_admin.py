@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 @router.message(F.chat.id == config.FEEDBACK_CHAT_ID)
 async def handle_feedback_reply(message: types.Message):
-    logger.info(f"🔥 Получено сообщение в канале от {message.from_user.id}: {message.text}")
+    logger.info(f"🔥 Получено сообщение в канале от {message.from_user.id}: {message.text} (reply_to={bool(message.reply_to_message)})")
     
     if not message.reply_to_message:
         logger.info("Не ответ, игнорируем")
@@ -21,10 +21,10 @@ async def handle_feedback_reply(message: types.Message):
     # Проверяем, что отвечаем на сообщение бота
     bot_info = await message.bot.get_me()
     if original.from_user.id != bot_info.id:
-        logger.info("Ответ не на сообщение бота, игнорируем")
+        logger.info("Ответ не на сообщение бота")
         return
 
-    # Извлекаем ID пользователя
+    # Извлекаем ID пользователя из текста оригинального сообщения
     original_text = original.text or original.caption or ""
     match = re.search(r'ID:\s*(\d+)', original_text)
     if not match:
