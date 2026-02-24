@@ -1,13 +1,14 @@
 import logging
 from datetime import datetime
 from aiogram import Router, types, F
-from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from sqlalchemy import func
 
 from database import get_db, Car, User, FuelEvent, MaintenanceEvent, Insurance
-from keyboards.main_menu import get_main_menu, get_cancel_keyboard
+from keyboards.main_menu import (
+    get_main_menu, get_fuel_submenu, get_maintenance_submenu,
+    get_insurance_submenu, get_more_submenu, get_cancel_keyboard
+)
 from config import config
 
 router = Router()
@@ -17,7 +18,6 @@ class ViewPhoto(StatesGroup):
     waiting_for_car = State()
     waiting_for_event = State()
 
-# Вспомогательные клавиатуры
 def make_car_keyboard(cars, action_prefix):
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[])
     for car in cars:
@@ -32,7 +32,6 @@ def make_car_keyboard(cars, action_prefix):
 def make_events_keyboard(events, action_prefix):
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[])
     for ev in events:
-        # Определяем текст в зависимости от типа события (он будет передан в action_prefix)
         if action_prefix.startswith('fuel'):
             text = f"{ev.date.strftime('%d.%m.%Y')} – {ev.liters} л, {ev.cost} ₽"
         elif action_prefix.startswith('maint'):
@@ -40,13 +39,13 @@ def make_events_keyboard(events, action_prefix):
             text = f"{ev.date.strftime('%d.%m.%Y')} – {cat}: {ev.description[:20]}..."
         elif action_prefix.startswith('ins'):
             text = f"{ev.end_date.strftime('%d.%m.%Y')} – {ev.cost} ₽"
-        else:  # общий случай (все чеки)
-            if hasattr(ev, 'liters'):  # FuelEvent
+        else:
+            if hasattr(ev, 'liters'):
                 text = f"⛽ {ev.date.strftime('%d.%m.%Y')} – {ev.liters} л, {ev.cost} ₽"
-            elif hasattr(ev, 'category'):  # MaintenanceEvent
+            elif hasattr(ev, 'category'):
                 cat = config.MAINTENANCE_CATEGORIES.get(ev.category, ev.category)
                 text = f"🔧 {ev.date.strftime('%d.%m.%Y')} – {cat}: {ev.description[:20]}..."
-            else:  # Insurance
+            else:
                 text = f"📄 {ev.end_date.strftime('%d.%m.%Y')} – {ev.cost} ₽"
         keyboard.inline_keyboard.append([
             types.InlineKeyboardButton(
@@ -56,30 +55,27 @@ def make_events_keyboard(events, action_prefix):
         ])
     return keyboard
 
-# ------------------- Обработчики для каждой категории -------------------
-
 @router.message(F.text == "📸 Мои чеки заправок")
 async def view_fuel_photos(message: types.Message, state: FSMContext):
     await state.update_data(event_type='fuel', category='fuel')
-    await start_car_selection(message, state)
+    await start_car_selection(message, state, get_fuel_submenu)
 
 @router.message(F.text == "📸 Мои чеки обслуживания")
 async def view_maint_photos(message: types.Message, state: FSMContext):
     await state.update_data(event_type='maint', category='maintenance')
-    await start_car_selection(message, state)
+    await start_car_selection(message, state, get_maintenance_submenu)
 
 @router.message(F.text == "📸 Мои чеки страховок")
 async def view_ins_photos(message: types.Message, state: FSMContext):
     await state.update_data(event_type='ins', category='insurance')
-    await start_car_selection(message, state)
+    await start_car_selection(message, state, get_insurance_submenu)
 
 @router.message(F.text == "📸 Все чеки")
 async def view_all_photos(message: types.Message, state: FSMContext):
     await state.update_data(event_type='all', category='all')
-    await start_car_selection(message, state)
+    await start_car_selection(message, state, get_more_submenu)
 
-# Общая функция выбора автомобиля
-async def start_car_selection(message: types.Message, state: FSMContext):
+async def start_car_selection(message: types.Message, state: FSMContext, submenu_func):
     with next(get_db()) as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
@@ -94,7 +90,7 @@ async def start_car_selection(message: types.Message, state: FSMContext):
 
         if len(cars) == 1:
             await state.update_data(car_id=cars[0].id)
-            await show_events(message, state, cars[0].id)
+            await show_events(message, state, cars[0].id, submenu_func)
         else:
             await state.set_state(ViewPhoto.waiting_for_car)
             await message.answer(
@@ -106,10 +102,20 @@ async def start_car_selection(message: types.Message, state: FSMContext):
 async def car_callback(callback: types.CallbackQuery, state: FSMContext):
     car_id = int(callback.data.split("_")[-1])
     await state.update_data(car_id=car_id)
-    await show_events(callback.message, state, car_id)
+    data = await state.get_data()
+    event_type = data.get('event_type')
+    if event_type == 'fuel':
+        submenu_func = get_fuel_submenu
+    elif event_type == 'maint':
+        submenu_func = get_maintenance_submenu
+    elif event_type == 'ins':
+        submenu_func = get_insurance_submenu
+    else:
+        submenu_func = get_more_submenu
+    await show_events(callback.message, state, car_id, submenu_func)
     await callback.answer()
 
-async def show_events(message: types.Message, state: FSMContext, car_id: int):
+async def show_events(message: types.Message, state: FSMContext, car_id: int, submenu_func):
     data = await state.get_data()
     event_type = data.get('event_type')
 
@@ -123,12 +129,10 @@ async def show_events(message: types.Message, state: FSMContext, car_id: int):
         elif event_type == 'ins':
             events = db.query(Insurance).filter(Insurance.car_id == car_id).order_by(Insurance.end_date.desc()).limit(10).all()
             prefix = "ins"
-        else:  # все чеки
-            # Собираем события из всех трёх таблиц
+        else:
             fuel_events = db.query(FuelEvent).filter(FuelEvent.car_id == car_id).all()
             maint_events = db.query(MaintenanceEvent).filter(MaintenanceEvent.car_id == car_id).all()
             ins_events = db.query(Insurance).filter(Insurance.car_id == car_id).all()
-            # Объединяем и сортируем по дате (для страховок по end_date, для других по date)
             all_events = []
             for ev in fuel_events:
                 ev._type = 'fuel'
@@ -143,11 +147,11 @@ async def show_events(message: types.Message, state: FSMContext, car_id: int):
                 ev._sort_date = ev.end_date
                 all_events.append(ev)
             all_events.sort(key=lambda x: x._sort_date, reverse=True)
-            events = all_events[:10]  # последние 10
+            events = all_events[:10]
             prefix = "all"
 
         if not events:
-            await message.answer("Нет записей с фото для этого автомобиля.")
+            await message.answer("Нет записей с фото для этого автомобиля.", reply_markup=submenu_func())
             await state.clear()
             return
 
@@ -160,13 +164,11 @@ async def show_events(message: types.Message, state: FSMContext, car_id: int):
 @router.callback_query(ViewPhoto.waiting_for_event, F.data.startswith(("fuel_ev_", "maint_ev_", "ins_ev_", "all_ev_")))
 async def event_callback(callback: types.CallbackQuery, state: FSMContext):
     parts = callback.data.split("_")
-    prefix = parts[0]  # fuel, maint, ins, all
+    prefix = parts[0]
     event_id = int(parts[-1])
 
     with next(get_db()) as db:
         if prefix in ('fuel', 'all'):
-            # В all может быть любой тип, нужно определить по таблице
-            # Для простоты будем искать по очереди
             event = db.query(FuelEvent).filter(FuelEvent.id == event_id).first()
             if not event and prefix == 'all':
                 event = db.query(MaintenanceEvent).filter(MaintenanceEvent.id == event_id).first()
@@ -187,9 +189,9 @@ async def event_callback(callback: types.CallbackQuery, state: FSMContext):
 
         if event.photo_id:
             caption = f"📸 Чек"
-            if hasattr(event, 'date'):
+            if hasattr(event, 'date') and event.date:
                 caption += f" от {event.date.strftime('%d.%m.%Y')}"
-            elif hasattr(event, 'end_date'):
+            elif hasattr(event, 'end_date') and event.end_date:
                 caption += f" (окончание {event.end_date.strftime('%d.%m.%Y')})"
             await callback.message.answer_photo(
                 photo=event.photo_id,
@@ -198,6 +200,18 @@ async def event_callback(callback: types.CallbackQuery, state: FSMContext):
         else:
             await callback.message.answer("❌ К этой записи не прикреплено фото.")
 
-    await callback.message.answer("Главное меню:", reply_markup=get_main_menu())
+    # Определяем, в какое подменю вернуться
+    data = await state.get_data()
+    event_type = data.get('event_type')
+    if event_type == 'fuel':
+        submenu_func = get_fuel_submenu
+    elif event_type == 'maint':
+        submenu_func = get_maintenance_submenu
+    elif event_type == 'ins':
+        submenu_func = get_insurance_submenu
+    else:
+        submenu_func = get_more_submenu
+
+    await callback.message.answer("Выберите действие:", reply_markup=submenu_func())
     await state.clear()
     await callback.answer()
