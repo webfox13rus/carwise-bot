@@ -9,6 +9,7 @@ import os
 
 from config import config
 from database import init_db, SessionLocal, Insurance, Car, User, Part
+from handlers.navigation import router as navigation_router
 from handlers.start import router as start_router
 from handlers.cars import router as cars_router
 from handlers.fuel import router as fuel_router
@@ -196,6 +197,7 @@ async def main():
     dp = Dispatcher(storage=storage)
 
     dp.include_router(start_router)
+    dp.include_router(navigation_router)
     dp.include_router(cars_router)
     dp.include_router(fuel_router)
     dp.include_router(maintenance_router)
