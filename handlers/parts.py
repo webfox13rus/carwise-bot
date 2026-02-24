@@ -4,24 +4,22 @@ from aiogram import Router, types, F
 from aiogram.filters import Command
 
 from database import get_db, Car, Part, User
-from keyboards.main_menu import get_main_menu
+from keyboards.main_menu import get_main_menu, get_maintenance_submenu
 
 router = Router()
 logger = logging.getLogger(__name__)
 
-# Обработчик для новой кнопки и для команды /parts
 @router.message(F.text == "🔧 Плановые замены")
-@router.message(F.text == "🔧 Детали")  # оставляем для обратной совместимости
 @router.message(Command("parts"))
 async def show_parts(message: types.Message):
     with next(get_db()) as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
-            await message.answer("Сначала зарегистрируйтесь", reply_markup=get_main_menu())
+            await message.answer("Сначала зарегистрируйтесь", reply_markup=get_maintenance_submenu())
             return
         cars = db.query(Car).filter(Car.user_id == user.id, Car.is_active == True).all()
         if not cars:
-            await message.answer("У вас нет автомобилей.", reply_markup=get_main_menu())
+            await message.answer("У вас нет автомобилей.", reply_markup=get_maintenance_submenu())
             return
 
         lines = ["🔧 Плановые замены:\n"]
@@ -53,5 +51,5 @@ async def show_parts(message: types.Message):
                         f"  • {part.name}: {', '.join(reasons)}"
                     )
         if not found:
-            lines.append("Все элементы в порядке, напоминаний нет.")
-        await message.answer("\n\n".join(lines), reply_markup=get_main_menu())
+            lines.append("Все детали в порядке, напоминаний нет.")
+        await message.answer("\n\n".join(lines), reply_markup=get_maintenance_submenu())
