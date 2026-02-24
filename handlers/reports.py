@@ -29,12 +29,6 @@ async def show_stats(message: types.Message):
             response_lines.append(f"🚗 {car.brand} {car.model} ({car.year}):")
             response_lines.append(f"Пробег: {car.current_mileage:,.0f} км")
 
-            # Расходы на обслуживание (суммарно)
-            maint_sum = db.query(MaintenanceEvent).filter(MaintenanceEvent.car_id == car.id).with_entities(func.sum(MaintenanceEvent.cost)).scalar() or 0
-            total_all_maintenance += maint_sum
-            if maint_sum > 0:
-                response_lines.append(f"🔧 Обслуживание: {maint_sum:,.2f} ₽")
-
             # Заправки с группировкой по типу топлива
             fuel_stats = db.query(
                 FuelEvent.fuel_type,
@@ -55,19 +49,34 @@ async def show_stats(message: types.Message):
                 response_lines.append(f"  Всего на топливо: {car_fuel_total:,.2f} ₽")
             else:
                 response_lines.append("⛽ Нет заправок")
-
             total_all_fuel += car_fuel_total
 
-            # Разделитель
-            response_lines.append("────────────")
-            response_lines.append("")  # пустая строка для читаемости
+            # Обслуживание с группировкой по категориям
+            maint_stats = db.query(
+                MaintenanceEvent.category,
+                func.count(MaintenanceEvent.id).label('count'),
+                func.sum(MaintenanceEvent.cost).label('total_cost')
+            ).filter(MaintenanceEvent.car_id == car.id).group_by(MaintenanceEvent.category).all()
 
-        # Итог по всем авто
+            car_maint_total = 0
+            if maint_stats:
+                response_lines.append("🔧 Обслуживание по категориям:")
+                for category, count, cost in maint_stats:
+                    cat_name = config.MAINTENANCE_CATEGORIES.get(category, category)
+                    response_lines.append(f"  • {cat_name}: {count} раз(а) – {cost:,.2f} ₽")
+                    car_maint_total += cost
+                response_lines.append(f"  Всего на обслуживание: {car_maint_total:,.2f} ₽")
+            else:
+                response_lines.append("🔧 Нет обслуживания")
+            total_all_maintenance += car_maint_total
+
+            response_lines.append("────────────")
+            response_lines.append("")
+
         response_lines.append(f"💰 ИТОГО по всем авто:")
         response_lines.append(f"⛽ Топливо: {total_all_fuel:,.2f} ₽")
         response_lines.append(f"🔧 Обслуживание: {total_all_maintenance:,.2f} ₽")
         response_lines.append(f"💵 Всего: {total_all_fuel + total_all_maintenance:,.2f} ₽")
 
-        # Отправка ответа (объединяем строки)
         full_response = "\n".join(response_lines)
         await message.answer(full_response, reply_markup=get_main_menu())
