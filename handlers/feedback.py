@@ -15,6 +15,7 @@ class Feedback(StatesGroup):
 
 @router.message(F.text == "✉️ Связаться с админом")
 async def feedback_start(message: types.Message, state: FSMContext):
+    logger.info(f"Feedback started by user {message.from_user.id}")
     await state.set_state(Feedback.waiting_for_message)
     await message.answer(
         "📝 Напишите ваше сообщение для администратора. "
@@ -33,27 +34,42 @@ async def process_feedback(message: types.Message, state: FSMContext):
         await message.answer("❌ Сообщение отменено", reply_markup=get_more_submenu())
         return
 
-    admin_id = config.ADMIN_IDS[0] if config.ADMIN_IDS else None
-    if not admin_id:
+    # Проверяем, есть ли администраторы
+    if not config.ADMIN_IDS:
         await message.answer("❌ Ошибка: администратор не настроен. Сообщение не отправлено.")
         await state.clear()
         return
 
+    admin_id = config.ADMIN_IDS[0]  # берём первого администратора
     user_info = f"Пользователь: {message.from_user.full_name}"
     if message.from_user.username:
         user_info += f" (@{message.from_user.username})"
     user_info += f"\nID: {message.from_user.id}"
 
-    await message.bot.send_message(
-        admin_id,
-        f"📩 *Новое сообщение от пользователя*\n\n"
-        f"{user_info}\n\n"
-        f"*Текст:*\n{message.text}",
-        parse_mode="Markdown"
-    )
+    try:
+        await message.bot.send_message(
+            admin_id,
+            f"📩 *Новое сообщение от пользователя*\n\n"
+            f"{user_info}\n\n"
+            f"*Текст:*\n{message.text}",
+            parse_mode="Markdown"
+        )
+        await message.answer(
+            "✅ Ваше сообщение отправлено администратору. Он ответит вам в ближайшее время.",
+            reply_markup=get_more_submenu()
+        )
+    except Exception as e:
+        logger.error(f"Ошибка отправки сообщения администратору: {e}")
+        await message.answer("❌ Произошла ошибка при отправке. Попробуйте позже.")
 
-    await message.answer(
-        "✅ Ваше сообщение отправлено администратору. Он ответит вам в ближайшее время.",
-        reply_markup=get_more_submenu()
-    )
     await state.clear()
+
+# Обработчик отмены через команду /cancel
+@router.message(Command("cancel"))
+async def cancel_feedback(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state is not None:
+        await state.clear()
+        await message.answer("❌ Действие отменено", reply_markup=get_more_submenu())
+    else:
+        await message.answer("Нет активного действия для отмены.")
