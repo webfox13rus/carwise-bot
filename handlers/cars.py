@@ -7,7 +7,10 @@ from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy import func
 
 from states.car_states import AddCarStates, MileageUpdateStates
-from keyboards.main_menu import get_main_menu, get_cancel_keyboard, get_fuel_types_keyboard
+from keyboards.main_menu import (
+    get_main_menu, get_cars_submenu, get_cancel_keyboard,
+    get_fuel_types_keyboard
+)
 from database import get_db, Car, User, FuelEvent, MaintenanceEvent, Insurance
 from config import config
 from car_data import CAR_BRANDS, get_models_for_brand
@@ -30,8 +33,21 @@ def make_inline_keyboard(items: list, callback_prefix: str, columns: int = 2) ->
     keyboard.append([types.InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")])
     return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
 
-# ------------------- Просмотр автомобилей (с информацией о страховке и ТО) -------------------
-@router.message(F.text == "🚗 Мои автомобили")
+# ------------------- Обработчики навигации по меню "Мои авто" -------------------
+@router.message(F.text == "🚗 Мои авто")
+async def cars_menu(message: types.Message, state: FSMContext):
+    """Показывает подменю управления автомобилями."""
+    await state.clear()  # Сбрасываем любые незавершённые действия
+    await message.answer("Управление автомобилями:", reply_markup=get_cars_submenu())
+
+@router.message(F.text == "◀️ Назад")
+async def back_to_main(message: types.Message, state: FSMContext):
+    """Возвращает в главное меню из любого подменю."""
+    await state.clear()
+    await message.answer("Главное меню:", reply_markup=get_main_menu())
+
+# ------------------- Просмотр списка автомобилей -------------------
+@router.message(F.text.in_(["🚗 Список авто", "🚗 Мои автомобили"]))
 @router.message(Command("my_cars"))
 async def show_my_cars(message: types.Message):
     with next(get_db()) as db:
@@ -44,7 +60,7 @@ async def show_my_cars(message: types.Message):
             await message.answer(
                 "🚫 У вас пока нет автомобилей.\n"
                 "Нажмите '➕ Добавить авто' чтобы добавить первый.",
-                reply_markup=get_main_menu()
+                reply_markup=get_cars_submenu()
             )
             return
         response = "🚗 Ваши автомобили:\n\n"
@@ -107,10 +123,9 @@ async def show_my_cars(message: types.Message):
             if car.name:
                 response += f"Имя: {car.name}\n"
             response += "────────────\n\n"
-        await message.answer(response, reply_markup=get_main_menu())
-
-# ------------------- Добавление автомобиля (с проверкой лимита) -------------------
-@router.message(F.text == "➕ Добавить авто")
+        await message.answer(response, reply_markup=get_cars_submenu())
+        # ------------------- Добавление автомобиля (с проверкой лимита) -------------------
+@router.message(F.text.in_(["➕ Добавить авто", "➕ Добавить авто"]))
 @router.message(Command("add_car"))
 async def add_car_start(message: types.Message, state: FSMContext):
     with next(get_db()) as db:
@@ -137,7 +152,7 @@ async def add_car_start(message: types.Message, state: FSMContext):
                 "Сейчас вы можете добавить только один автомобиль. "
                 "Чтобы добавить больше, приобретите подписку. Функция подписки находится в разработке и будет доступна позже.",
                 parse_mode="Markdown",
-                reply_markup=get_main_menu()
+                reply_markup=get_cars_submenu()
             )
             return
 
@@ -153,10 +168,9 @@ async def add_car_start(message: types.Message, state: FSMContext):
 async def cancel_callback(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.edit_text("❌ Добавление отменено")
-    await callback.message.answer("Главное меню:", reply_markup=get_main_menu())
+    await callback.message.answer("Управление автомобилями:", reply_markup=get_cars_submenu())
     await callback.answer()
-
-# Выбор марки (callback)
+    # Выбор марки (callback)
 @router.callback_query(F.data.startswith("brand:"))
 async def process_brand_callback(callback: types.CallbackQuery, state: FSMContext):
     brand = callback.data.split(":", 1)[1]
@@ -187,7 +201,7 @@ async def process_brand_callback(callback: types.CallbackQuery, state: FSMContex
 async def process_brand_manual(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Добавление отменено", reply_markup=get_main_menu())
+        await message.answer("❌ Добавление отменено", reply_markup=get_cars_submenu())
         return
     brand = message.text.strip()
     await state.update_data(brand=brand)
@@ -222,7 +236,7 @@ async def process_model_callback(callback: types.CallbackQuery, state: FSMContex
 async def process_model_manual(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Добавление отменено", reply_markup=get_main_menu())
+        await message.answer("❌ Добавление отменено", reply_markup=get_cars_submenu())
         return
     model = message.text.strip()
     data = await state.get_data()
@@ -239,7 +253,7 @@ async def process_model_manual(message: types.Message, state: FSMContext):
 async def process_year(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Добавление отменено", reply_markup=get_main_menu())
+        await message.answer("❌ Добавление отменено", reply_markup=get_cars_submenu())
         return
     try:
         year = int(message.text)
@@ -263,7 +277,7 @@ async def process_year(message: types.Message, state: FSMContext):
 async def process_name(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Добавление отменено", reply_markup=get_main_menu())
+        await message.answer("❌ Добавление отменено", reply_markup=get_cars_submenu())
         return
     name = message.text if message.text != "-" else None
     await state.update_data(name=name)
@@ -279,7 +293,7 @@ async def process_name(message: types.Message, state: FSMContext):
 async def process_mileage(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Добавление отменено", reply_markup=get_main_menu())
+        await message.answer("❌ Добавление отменено", reply_markup=get_cars_submenu())
         return
     try:
         mileage = float(message.text.replace(',', '.'))
@@ -344,7 +358,7 @@ async def process_fuel_type(callback: types.CallbackQuery, state: FSMContext):
 async def confirm_car_addition(message: types.Message, state: FSMContext):
     if message.text == "❌ Нет, исправить":
         await state.clear()
-        await message.answer("❌ Добавление отменено", reply_markup=get_main_menu())
+        await message.answer("❌ Добавление отменено", reply_markup=get_cars_submenu())
         return
 
     data = await state.get_data()
@@ -385,12 +399,11 @@ async def confirm_car_addition(message: types.Message, state: FSMContext):
             f"Текущий пробег: {data['mileage']:,.0f} км\n"
             f"ID автомобиля: {car.id}\n\n"
             f"Теперь вы можете добавлять заправки, обслуживание и отслеживать расходы.",
-            reply_markup=get_main_menu()
+            reply_markup=get_cars_submenu()
         )
     await state.clear()
-
-# ------------------- Обновление пробега -------------------
-@router.message(F.text == "🔄 Обновить пробег")
+    # ------------------- Обновление пробега -------------------
+@router.message(F.text.in_(["🔄 Обновить пробег", "🔄 Обновить пробег"]))
 async def update_mileage_start(message: types.Message, state: FSMContext):
     with next(get_db()) as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
@@ -399,7 +412,7 @@ async def update_mileage_start(message: types.Message, state: FSMContext):
             return
         cars = db.query(Car).filter(Car.user_id == user.id, Car.is_active == True).all()
         if not cars:
-            await message.answer("🚫 У вас нет автомобилей")
+            await message.answer("🚫 У вас нет автомобилей", reply_markup=get_cars_submenu())
             return
         if len(cars) == 1:
             await state.update_data(car_id=cars[0].id)
@@ -444,7 +457,7 @@ async def select_car_for_mileage(callback: types.CallbackQuery, state: FSMContex
 async def process_new_mileage(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Обновление отменено", reply_markup=get_main_menu())
+        await message.answer("❌ Обновление отменено", reply_markup=get_cars_submenu())
         return
     try:
         new_mileage = float(message.text.replace(',', '.'))
@@ -477,7 +490,7 @@ async def process_new_mileage(message: types.Message, state: FSMContext):
                     f"Было: {old_mileage:,.0f} км\n"
                     f"Стало: {new_mileage:,.0f} км\n"
                     f"Пройдено: +{new_mileage - old_mileage:,.1f} км",
-                    reply_markup=get_main_menu()
+                    reply_markup=get_cars_submenu()
                 )
         await state.clear()
     except ValueError:
@@ -487,7 +500,7 @@ async def process_new_mileage(message: types.Message, state: FSMContext):
 class DeleteCarStates(StatesGroup):
     waiting_for_confirmation = State()
 
-@router.message(F.text == "🗑 Удалить авто")
+@router.message(F.text.in_(["🗑 Удалить авто", "🗑 Удалить авто"]))
 @router.message(Command("delete_car"))
 async def delete_car_start(message: types.Message, state: FSMContext):
     with next(get_db()) as db:
@@ -497,7 +510,7 @@ async def delete_car_start(message: types.Message, state: FSMContext):
             return
         cars = db.query(Car).filter(Car.user_id == user.id, Car.is_active == True).all()
         if not cars:
-            await message.answer("🚫 У вас нет активных автомобилей для удаления.", reply_markup=get_main_menu())
+            await message.answer("🚫 У вас нет активных автомобилей для удаления.", reply_markup=get_cars_submenu())
             return
 
         if len(cars) == 1:
@@ -560,7 +573,7 @@ async def delete_car_callback(callback: types.CallbackQuery, state: FSMContext):
 async def delete_car_confirm(message: types.Message, state: FSMContext):
     if message.text == "❌ Нет, отмена":
         await state.clear()
-        await message.answer("❌ Удаление отменено", reply_markup=get_main_menu())
+        await message.answer("❌ Удаление отменено", reply_markup=get_cars_submenu())
         return
 
     data = await state.get_data()
@@ -575,10 +588,10 @@ async def delete_car_confirm(message: types.Message, state: FSMContext):
             await message.answer(
                 f"✅ Автомобиль *{car_name}* успешно удалён из списка.\n"
                 "Все связанные данные сохранены в истории.",
-                reply_markup=get_main_menu(),
+                reply_markup=get_cars_submenu(),
                 parse_mode="Markdown"
             )
         else:
-            await message.answer("❌ Ошибка: автомобиль не найден.", reply_markup=get_main_menu())
+            await message.answer("❌ Ошибка: автомобиль не найден.", reply_markup=get_cars_submenu())
 
     await state.clear()
