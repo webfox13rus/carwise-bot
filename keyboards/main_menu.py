@@ -1,6 +1,5 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
-# ------------------- Главное меню -------------------
 def get_main_menu():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
@@ -15,7 +14,6 @@ def get_main_menu():
     )
     return keyboard
 
-# ------------------- Подменю "Мои авто" -------------------
 def get_cars_submenu():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
@@ -29,7 +27,6 @@ def get_cars_submenu():
     )
     return keyboard
 
-# ------------------- Подменю "Заправки" -------------------
 def get_fuel_submenu():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
@@ -41,7 +38,6 @@ def get_fuel_submenu():
     )
     return keyboard
 
-# ------------------- Подменю "Обслуживание" -------------------
 def get_maintenance_submenu():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
@@ -55,7 +51,6 @@ def get_maintenance_submenu():
     )
     return keyboard
 
-# ------------------- Подменю "Страховки" -------------------
 def get_insurance_submenu():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
@@ -68,7 +63,6 @@ def get_insurance_submenu():
     )
     return keyboard
 
-# ------------------- Подменю "Ещё" -------------------
 def get_more_submenu():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
@@ -82,7 +76,18 @@ def get_more_submenu():
     )
     return keyboard
 
-# ------------------- Клавиатура отмены -------------------
+# НОВОЕ: подменю для статистики
+def get_stats_submenu():
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📊 Краткая статистика")],
+            [KeyboardButton(text="📈 Детальная статистика")],
+            [KeyboardButton(text="◀️ Назад")]
+        ],
+        resize_keyboard=True
+    )
+    return keyboard
+
 def get_cancel_keyboard():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="❌ Отмена")]],
@@ -90,7 +95,6 @@ def get_cancel_keyboard():
     )
     return keyboard
 
-# ------------------- Клавиатура выбора типа топлива (inline) -------------------
 def get_fuel_types_keyboard():
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
