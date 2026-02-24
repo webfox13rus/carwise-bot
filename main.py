@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from aiogram import Bot, Dispatcher
+from handlers.edit import router as edit_router
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -214,6 +215,7 @@ async def main():
     dp = Dispatcher(storage=storage)
 
     # Подключаем все обработчики (роутеры)
+    dp.include_router(edit_router)
     dp.include_router(start_router)          # /start, /help
     dp.include_router(cars_router)           # управление автомобилями
     dp.include_router(fuel_router)           # заправки
