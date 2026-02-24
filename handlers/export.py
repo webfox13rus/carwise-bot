@@ -6,11 +6,12 @@ from aiogram.filters import Command
 from aiogram.types import BufferedInputFile
 
 from database import get_db, User, Car, FuelEvent, MaintenanceEvent, Insurance, Part
-from keyboards.main_menu import get_main_menu, get_more_submenu
+from keyboards.main_menu import get_stats_submenu, get_main_menu
 
 router = Router()
 
-@router.message(F.text == "📤 Экспорт данных")
+# Обрабатываем оба возможных текста кнопки (старый и новый)
+@router.message(F.text.in_(["📤 Экспорт данных", "📤 Экспорт в CSV"]))
 @router.message(Command("export"))
 async def export_data(message: types.Message):
     with next(get_db()) as db:
@@ -21,7 +22,7 @@ async def export_data(message: types.Message):
 
         cars = db.query(Car).filter(Car.user_id == user.id, Car.is_active == True).all()
         if not cars:
-            await message.answer("У вас нет автомобилей для экспорта.")
+            await message.answer("У вас нет автомобилей для экспорта.", reply_markup=get_stats_submenu())
             return
 
         output = io.StringIO()
@@ -112,4 +113,4 @@ async def export_data(message: types.Message):
             caption="📊 Ваши данные в формате CSV. Открыть можно в Excel или любом табличном редакторе."
         )
 
-        await message.answer("Главное меню:", reply_markup=get_main_menu())
+        await message.answer("Выберите действие:", reply_markup=get_stats_submenu())
