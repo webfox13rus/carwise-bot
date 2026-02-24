@@ -13,6 +13,7 @@ from config import config
 from database import init_db, SessionLocal, Insurance, Car, User, Part
 # Импортируем все роутеры (обработчики команд)
 from handlers.export import router as export_router
+from handlers.feedback import router as feedback_router
 from handlers.start import router as start_router
 from handlers.cars import router as cars_router
 from handlers.fuel import router as fuel_router
@@ -216,6 +217,7 @@ async def main():
 
     # Подключаем все обработчики (роутеры)
     dp.include_router(edit_router)
+    dp.include_router(feedback_router)
     dp.include_router(start_router)          # /start, /help
     dp.include_router(cars_router)           # управление автомобилями
     dp.include_router(fuel_router)           # заправки
