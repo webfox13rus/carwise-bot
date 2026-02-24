@@ -9,10 +9,10 @@ from keyboards.main_menu import (
     get_insurance_submenu,
     get_more_submenu
 )
+from handlers.reports import show_stats  # импортируем функцию статистики
 
 router = Router()
 
-# Обработчики для пунктов главного меню
 @router.message(F.text == "🚗 Мои авто")
 async def go_to_cars(message: types.Message, state: FSMContext):
     await state.clear()
@@ -33,19 +33,18 @@ async def go_to_insurance(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer("Управление страховками:", reply_markup=get_insurance_submenu())
 
+# Исправленная обработка статистики – сразу показываем отчёт
 @router.message(F.text == "📊 Статистика")
 async def go_to_stats(message: types.Message, state: FSMContext):
-    # Статистика не имеет подменю, просто вызываем команду
     await state.clear()
-    # Можно вызвать напрямую хендлер stats, но проще перенаправить пользователя
-    await message.answer("Введите /stats для просмотра статистики или нажмите кнопку ниже:", reply_markup=get_main_menu())
+    # Вызываем функцию показа статистики напрямую
+    await show_stats(message)
 
 @router.message(F.text == "⚙️ Ещё")
 async def go_to_more(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer("Дополнительные функции:", reply_markup=get_more_submenu())
 
-# Обработчик для кнопки "◀️ Назад" (возврат в главное меню)
 @router.message(F.text == "◀️ Назад")
 async def back_to_main(message: types.Message, state: FSMContext):
     await state.clear()
