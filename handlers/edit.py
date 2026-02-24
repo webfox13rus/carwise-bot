@@ -137,6 +137,7 @@ async def edit_fuel_car_callback(callback: types.CallbackQuery, state: FSMContex
     await show_fuel_events(callback.message, state, car_id)
     await callback.answer()
 
+# ИСПРАВЛЕНО
 @router.callback_query(F.data.startswith("edit_fuel_ev_"))
 async def edit_fuel_event_callback(callback: types.CallbackQuery, state: FSMContext):
     event_id = int(callback.data.split("_")[-1])
@@ -144,6 +145,10 @@ async def edit_fuel_event_callback(callback: types.CallbackQuery, state: FSMCont
     await state.set_state(EditFuel.waiting_for_amount)
     await callback.message.edit_text(
         "Введите новое количество литров (или отправьте '0' для пропуска):",
+        reply_markup=None  # убираем клавиатуру
+    )
+    await callback.message.answer(
+        "Введите число:",
         reply_markup=get_cancel_keyboard()
     )
     await callback.answer()
@@ -297,6 +302,7 @@ async def edit_maint_car_callback(callback: types.CallbackQuery, state: FSMConte
     await show_maint_events(callback.message, state, car_id)
     await callback.answer()
 
+# ИСПРАВЛЕНО
 @router.callback_query(F.data.startswith("edit_maint_ev_"))
 async def edit_maint_event_callback(callback: types.CallbackQuery, state: FSMContext):
     event_id = int(callback.data.split("_")[-1])
@@ -304,7 +310,11 @@ async def edit_maint_event_callback(callback: types.CallbackQuery, state: FSMCon
     await state.set_state(EditMaintenance.waiting_for_category)
     await callback.message.edit_text(
         "Выберите новую категорию (или отправьте '0' для пропуска):",
-        reply_markup=get_category_keyboard()
+        reply_markup=get_category_keyboard()  # это inline-клавиатура, можно оставить
+    )
+    await callback.message.answer(
+        "Выберите категорию:",
+        reply_markup=None  # но здесь не нужно дополнительное сообщение
     )
     await callback.answer()
 
@@ -315,6 +325,10 @@ async def edit_maint_category(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(EditMaintenance.waiting_for_description)
     await callback.message.edit_text(
         "Введите новое описание (или отправьте '0' для пропуска):",
+        reply_markup=None  # убираем клавиатуру
+    )
+    await callback.message.answer(
+        "Введите описание:",
         reply_markup=get_cancel_keyboard()
     )
     await callback.answer()
@@ -453,6 +467,7 @@ async def edit_ins_car_callback(callback: types.CallbackQuery, state: FSMContext
     await show_ins_events(callback.message, state, car_id)
     await callback.answer()
 
+# ИСПРАВЛЕНО
 @router.callback_query(F.data.startswith("edit_ins_ev_"))
 async def edit_ins_event_callback(callback: types.CallbackQuery, state: FSMContext):
     event_id = int(callback.data.split("_")[-1])
@@ -460,6 +475,10 @@ async def edit_ins_event_callback(callback: types.CallbackQuery, state: FSMConte
     await state.set_state(EditInsurance.waiting_for_end_date)
     await callback.message.edit_text(
         "Введите новую дату окончания в формате ДД.ММ.ГГГГ (или '0' для пропуска):",
+        reply_markup=None
+    )
+    await callback.message.answer(
+        "Введите дату:",
         reply_markup=get_cancel_keyboard()
     )
     await callback.answer()
