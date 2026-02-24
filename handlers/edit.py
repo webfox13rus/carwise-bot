@@ -42,7 +42,7 @@ class EditInsurance(StatesGroup):
     waiting_for_notes = State()
     waiting_for_photo = State()
 
-# ------------------- Вспомогательные функции для клавиатур -------------------
+# ------------------- Вспомогательные функции -------------------
 def make_car_keyboard(cars, action_prefix):
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[])
     for car in cars:
@@ -199,15 +199,12 @@ async def edit_fuel_mileage(message: types.Message, state: FSMContext):
     except ValueError:
         await message.answer("❌ Введите число (например, 150000)")
 
-# ИСПРАВЛЕНО: теперь отправляем новое сообщение с кнопкой "Пропустить"
 @router.callback_query(EditFuel.waiting_for_fuel_type, F.data.startswith("fuel_type_"))
 async def edit_fuel_type(callback: types.CallbackQuery, state: FSMContext):
     fuel_type = callback.data.split("_")[-1]
     await state.update_data(fuel_type=fuel_type)
     await state.set_state(EditFuel.waiting_for_photo)
-    # Удаляем сообщение с inline-кнопками
     await callback.message.delete()
-    # Отправляем новое сообщение с reply-клавиатурой
     await callback.message.answer(
         "Отправьте новое фото чека (или нажмите кнопку 'Пропустить'):",
         reply_markup=types.ReplyKeyboardMarkup(
@@ -363,9 +360,6 @@ async def edit_maint_mileage(message: types.Message, state: FSMContext):
         mileage = float(message.text.replace(',', '.')) if message.text != "0" else None
         await state.update_data(mileage=mileage)
         await state.set_state(EditMaintenance.waiting_for_photo)
-        # ИСПРАВЛЕНО: удаляем предыдущее сообщение и отправляем новое с кнопкой
-        # Здесь предыдущее сообщение — это то, которое содержало запрос пробега (текстовое), его удалять не обязательно
-        # Но чтобы не плодить, отправим новое сообщение с клавиатурой
         await message.answer(
             "Отправьте новое фото чека (или нажмите кнопку 'Пропустить'):",
             reply_markup=types.ReplyKeyboardMarkup(
@@ -544,7 +538,6 @@ async def edit_ins_notes(message: types.Message, state: FSMContext):
     notes = message.text if message.text != "0" else None
     await state.update_data(notes=notes)
     await state.set_state(EditInsurance.waiting_for_photo)
-    # ИСПРАВЛЕНО: отправляем новое сообщение с кнопкой
     await message.answer(
         "Отправьте новое фото чека (или нажмите кнопку 'Пропустить'):",
         reply_markup=types.ReplyKeyboardMarkup(
