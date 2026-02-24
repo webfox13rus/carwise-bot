@@ -75,7 +75,7 @@ def get_more_submenu():
             [KeyboardButton(text="📤 Экспорт данных")],
             [KeyboardButton(text="📸 Все чеки")],
             [KeyboardButton(text="📞 Помощь / О боте")],
-            [KeyboardButton(text="✉️ Связаться с админом")],  # новая кнопка
+            [KeyboardButton(text="✉️ Связаться с админом")],
             [KeyboardButton(text="◀️ Назад")]
         ],
         resize_keyboard=True
