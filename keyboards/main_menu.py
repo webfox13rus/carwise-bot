@@ -8,7 +8,8 @@ def get_main_menu():
             [KeyboardButton(text="📊 Статистика"), KeyboardButton(text="🔄 Обновить пробег")],
             [KeyboardButton(text="📄 Страховка"), KeyboardButton(text="⏰ Напоминания ТО")],
             [KeyboardButton(text="🗑 Удалить авто"), KeyboardButton(text="📤 Экспорт данных")],
-            [KeyboardButton(text="🔧 Плановые замены")]  # отдельная кнопка
+            [KeyboardButton(text="🔧 Плановые замены")],
+            [KeyboardButton(text="✏️ Редактировать запись")]  # новая кнопка
         ],
         resize_keyboard=True
     )
