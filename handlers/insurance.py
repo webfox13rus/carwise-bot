@@ -7,7 +7,7 @@ from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy import func
 
 from database import get_db, Car, User, Insurance
-from keyboards.main_menu import get_main_menu, get_cancel_keyboard
+from keyboards.main_menu import get_main_menu, get_insurance_submenu, get_cancel_keyboard
 from config import config
 
 router = Router()
@@ -20,7 +20,7 @@ class AddInsurance(StatesGroup):
     waiting_for_policy = State()
     waiting_for_company = State()
     waiting_for_notes = State()
-    waiting_for_photo = State()  # новое
+    waiting_for_photo = State()
 
 def make_car_keyboard(cars):
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[])
@@ -33,24 +33,12 @@ def make_car_keyboard(cars):
         ])
     return keyboard
 
-@router.message(F.text == "📄 Страховка")
-@router.message(Command("insurance"))
-async def insurance_menu(message: types.Message):
-    keyboard = types.ReplyKeyboardMarkup(
-        keyboard=[
-            [types.KeyboardButton(text="➕ Добавить страховку")],
-            [types.KeyboardButton(text="📄 Мои страховки")],
-            [types.KeyboardButton(text="◀️ Назад в меню")]
-        ],
-        resize_keyboard=True
-    )
-    await message.answer("Управление страховками:", reply_markup=keyboard)
+@router.message(F.text == "📄 Страховки")
+async def insurance_menu(message: types.Message, state: FSMContext):
+    await state.clear()
+    await message.answer("Управление страховками:", reply_markup=get_insurance_submenu())
 
-@router.message(F.text == "◀️ Назад в меню")
-async def back_to_main(message: types.Message):
-    await message.answer("Главное меню:", reply_markup=get_main_menu())
-
-@router.message(F.text == "➕ Добавить страховку")
+@router.message(F.text == "📄 Добавить страховку")
 @router.message(Command("add_insurance"))
 async def add_insurance_start(message: types.Message, state: FSMContext):
     with next(get_db()) as db:
@@ -95,7 +83,7 @@ async def process_car_choice(callback: types.CallbackQuery, state: FSMContext):
 async def process_end_date(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Добавление отменено", reply_markup=get_main_menu())
+        await message.answer("❌ Добавление отменено", reply_markup=get_insurance_submenu())
         return
     try:
         end_date = datetime.strptime(message.text.strip(), "%d.%m.%Y")
@@ -115,7 +103,7 @@ async def process_end_date(message: types.Message, state: FSMContext):
 async def process_cost(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Добавление отменено", reply_markup=get_main_menu())
+        await message.answer("❌ Добавление отменено", reply_markup=get_insurance_submenu())
         return
     try:
         cost = float(message.text.replace(',', '.'))
@@ -132,7 +120,7 @@ async def process_cost(message: types.Message, state: FSMContext):
 async def process_policy(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Добавление отменено", reply_markup=get_main_menu())
+        await message.answer("❌ Добавление отменено", reply_markup=get_insurance_submenu())
         return
     policy = message.text if message.text != "-" else None
     await state.update_data(policy=policy)
@@ -146,7 +134,7 @@ async def process_policy(message: types.Message, state: FSMContext):
 async def process_company(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Добавление отменено", reply_markup=get_main_menu())
+        await message.answer("❌ Добавление отменено", reply_markup=get_insurance_submenu())
         return
     company = message.text if message.text != "-" else None
     await state.update_data(company=company)
@@ -160,11 +148,10 @@ async def process_company(message: types.Message, state: FSMContext):
 async def process_notes(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Добавление отменено", reply_markup=get_main_menu())
+        await message.answer("❌ Добавление отменено", reply_markup=get_insurance_submenu())
         return
     notes = message.text if message.text != "-" else None
     await state.update_data(notes=notes)
-    # Переходим к фото
     await state.set_state(AddInsurance.waiting_for_photo)
     await message.answer(
         "Теперь вы можете прикрепить фото чека или полиса (необязательно).",
@@ -221,22 +208,21 @@ async def save_insurance(message: types.Message, state: FSMContext):
         f"Стоимость: {cost:.2f} ₽\n"
         f"Номер полиса: {policy or 'не указан'}\n"
         f"Компания: {company or 'не указана'}",
-        reply_markup=get_main_menu()
+        reply_markup=get_insurance_submenu()
     )
     await state.clear()
 
-# Просмотр списка страховок (без изменений)
-@router.message(F.text == "📄 Мои страховки")
+@router.message(F.text == "📄 Список страховок")
 @router.message(Command("my_insurances"))
 async def show_insurances(message: types.Message):
     with next(get_db()) as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
-            await message.answer("Сначала зарегистрируйтесь", reply_markup=get_main_menu())
+            await message.answer("Сначала зарегистрируйтесь", reply_markup=get_insurance_submenu())
             return
         cars = db.query(Car).filter(Car.user_id == user.id, Car.is_active == True).all()
         if not cars:
-            await message.answer("У вас нет автомобилей.", reply_markup=get_main_menu())
+            await message.answer("У вас нет автомобилей.", reply_markup=get_insurance_submenu())
             return
 
         response = "📄 Ваши страховки:\n\n"
@@ -261,4 +247,4 @@ async def show_insurances(message: types.Message):
                 response += "\n"
         if not found:
             response = "У вас пока нет добавленных страховок."
-        await message.answer(response, reply_markup=get_main_menu())
+        await message.answer(response, reply_markup=get_insurance_submenu())
