@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup  # <-- добавлен недостающий импорт
+from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy import func
 
 from states.car_states import AddCarStates, MileageUpdateStates
@@ -127,7 +127,11 @@ async def add_car_start(message: types.Message, state: FSMContext):
             db.commit()
 
         car_count = db.query(Car).filter(Car.user_id == user.id, Car.is_active == True).count()
-        if car_count >= 1 and not user.is_premium:
+        
+        # Проверяем, является ли пользователь администратором
+        is_admin = message.from_user.id in config.ADMIN_IDS
+        
+        if car_count >= 1 and not user.is_premium and not is_admin:
             await message.answer(
                 "❌ *Добавление второго автомобиля* – платная функция.\n\n"
                 "Сейчас вы можете добавить только один автомобиль. "
