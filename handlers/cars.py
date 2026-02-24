@@ -33,19 +33,6 @@ def make_inline_keyboard(items: list, callback_prefix: str, columns: int = 2) ->
     keyboard.append([types.InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")])
     return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
 
-# ------------------- Обработчики навигации по меню "Мои авто" -------------------
-@router.message(F.text == "🚗 Мои авто")
-async def cars_menu(message: types.Message, state: FSMContext):
-    """Показывает подменю управления автомобилями."""
-    await state.clear()  # Сбрасываем любые незавершённые действия
-    await message.answer("Управление автомобилями:", reply_markup=get_cars_submenu())
-
-@router.message(F.text == "◀️ Назад")
-async def back_to_main(message: types.Message, state: FSMContext):
-    """Возвращает в главное меню из любого подменю."""
-    await state.clear()
-    await message.answer("Главное меню:", reply_markup=get_main_menu())
-
 # ------------------- Просмотр списка автомобилей -------------------
 @router.message(F.text.in_(["🚗 Список авто", "🚗 Мои автомобили"]))
 @router.message(Command("my_cars"))
@@ -124,7 +111,8 @@ async def show_my_cars(message: types.Message):
                 response += f"Имя: {car.name}\n"
             response += "────────────\n\n"
         await message.answer(response, reply_markup=get_cars_submenu())
-        # ------------------- Добавление автомобиля (с проверкой лимита) -------------------
+
+# ------------------- Добавление автомобиля (с проверкой лимита) -------------------
 @router.message(F.text.in_(["➕ Добавить авто", "➕ Добавить авто"]))
 @router.message(Command("add_car"))
 async def add_car_start(message: types.Message, state: FSMContext):
@@ -170,7 +158,8 @@ async def cancel_callback(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text("❌ Добавление отменено")
     await callback.message.answer("Управление автомобилями:", reply_markup=get_cars_submenu())
     await callback.answer()
-    # Выбор марки (callback)
+
+# Выбор марки (callback)
 @router.callback_query(F.data.startswith("brand:"))
 async def process_brand_callback(callback: types.CallbackQuery, state: FSMContext):
     brand = callback.data.split(":", 1)[1]
@@ -402,7 +391,8 @@ async def confirm_car_addition(message: types.Message, state: FSMContext):
             reply_markup=get_cars_submenu()
         )
     await state.clear()
-    # ------------------- Обновление пробега -------------------
+
+# ------------------- Обновление пробега -------------------
 @router.message(F.text.in_(["🔄 Обновить пробег", "🔄 Обновить пробег"]))
 async def update_mileage_start(message: types.Message, state: FSMContext):
     with next(get_db()) as db:
