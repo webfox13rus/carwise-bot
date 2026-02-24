@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 from config import config
-from keyboards.main_menu import get_main_menu
+from keyboards.main_menu import get_main_menu, get_more_submenu
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -30,17 +30,15 @@ async def feedback_start(message: types.Message, state: FSMContext):
 async def process_feedback(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Сообщение отменено", reply_markup=get_main_menu())
+        await message.answer("❌ Сообщение отменено", reply_markup=get_more_submenu())
         return
 
-    # Получаем ID администратора из config.ADMIN_IDS (первый в списке)
     admin_id = config.ADMIN_IDS[0] if config.ADMIN_IDS else None
     if not admin_id:
         await message.answer("❌ Ошибка: администратор не настроен. Сообщение не отправлено.")
         await state.clear()
         return
 
-    # Формируем текст для администратора
     user_info = f"Пользователь: {message.from_user.full_name}"
     if message.from_user.username:
         user_info += f" (@{message.from_user.username})"
@@ -56,6 +54,6 @@ async def process_feedback(message: types.Message, state: FSMContext):
 
     await message.answer(
         "✅ Ваше сообщение отправлено администратору. Он ответит вам в ближайшее время.",
-        reply_markup=get_main_menu()
+        reply_markup=get_more_submenu()
     )
     await state.clear()
