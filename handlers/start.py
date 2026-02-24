@@ -1,4 +1,4 @@
-from aiogram import Router, types
+from aiogram import Router, types, F
 from aiogram.filters import Command
 from keyboards.main_menu import get_main_menu
 
@@ -15,6 +15,7 @@ async def cmd_start(message: types.Message):
     )
 
 @router.message(Command("help"))
+@router.message(F.text == "📞 Помощь / О боте")  # добавляем обработчик для кнопки
 async def cmd_help(message: types.Message):
     help_text = (
         "📋 *CarWise Bot – полное руководство*\n\n"
