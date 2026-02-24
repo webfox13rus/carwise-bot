@@ -1,13 +1,12 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 from database import get_db, Car, User
-from keyboards.main_menu import get_main_menu, get_cancel_keyboard
-from config import config
+from keyboards.main_menu import get_main_menu, get_maintenance_submenu, get_cancel_keyboard
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -79,12 +78,12 @@ async def process_car_choice(callback: types.CallbackQuery, state: FSMContext):
 async def process_mileage_interval(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Настройка отменена", reply_markup=get_main_menu())
+        await message.answer("❌ Настройка отменена", reply_markup=get_maintenance_submenu())
         return
     try:
         mileage_int = float(message.text.replace(',', '.'))
         if mileage_int < 0:
-            await message.answer("❌ Интервал не может быть отрицательным. Введите число больше или равное 0:")
+            await message.answer("❌ Интервал не может быть отрицательным. Введите число >=0:")
             return
         await state.update_data(mileage_int=mileage_int)
         await state.set_state(SetReminder.waiting_for_months_interval)
@@ -96,17 +95,16 @@ async def process_mileage_interval(message: types.Message, state: FSMContext):
     except ValueError:
         await message.answer("❌ Введите число (например, 10000)")
 
-# ИСПРАВЛЕННАЯ ФУНКЦИЯ: данные сохраняются до закрытия сессии
 @router.message(SetReminder.waiting_for_months_interval)
 async def process_months_interval(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
         await state.clear()
-        await message.answer("❌ Настройка отменена", reply_markup=get_main_menu())
+        await message.answer("❌ Настройка отменена", reply_markup=get_maintenance_submenu())
         return
     try:
         months_int = int(message.text)
         if months_int < 0:
-            await message.answer("❌ Интервал не может быть отрицательным. Введите целое число больше или равное 0:")
+            await message.answer("❌ Интервал не может быть отрицательным. Введите целое число >=0:")
             return
         data = await state.get_data()
         car_id = data['car_id']
@@ -120,7 +118,6 @@ async def process_months_interval(message: types.Message, state: FSMContext):
                 car.notified_to_mileage = False
                 car.notified_to_date = False
                 db.commit()
-                # Сохраняем данные для ответа до закрытия сессии
                 car_brand = car.brand
                 car_model = car.model
                 mileage_display = f"{mileage_int} км" if mileage_int > 0 else "не установлен"
@@ -135,13 +132,12 @@ async def process_months_interval(message: types.Message, state: FSMContext):
             f"Автомобиль: {car_brand} {car_model}\n"
             f"Интервал по пробегу: {mileage_display}\n"
             f"Интервал по времени: {months_display}",
-            reply_markup=get_main_menu()
+            reply_markup=get_maintenance_submenu()
         )
         await state.clear()
     except ValueError:
         await message.answer("❌ Введите целое число (например, 12)")
 
-# Команда для просмотра текущих настроек (тоже проверена на DetachedInstanceError)
 @router.message(Command("show_reminders"))
 async def show_reminders(message: types.Message):
     with next(get_db()) as db:
@@ -166,4 +162,4 @@ async def show_reminders(message: types.Message):
                 f"  Интервал по пробегу: {mileage_int} км\n"
                 f"  Интервал по времени: {months_int} мес."
             )
-        await message.answer("\n\n".join(lines), reply_markup=get_main_menu())
+        await message.answer("\n\n".join(lines), reply_markup=get_maintenance_submenu())
