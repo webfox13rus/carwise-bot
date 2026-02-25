@@ -42,11 +42,6 @@ def get_category_keyboard():
         ])
     return keyboard
 
-@router.message(F.text == "🔧 Обслуживание")
-async def maintenance_menu(message: types.Message, state: FSMContext):
-    await state.clear()
-    await message.answer("Управление обслуживанием:", reply_markup=get_maintenance_submenu())
-
 @router.message(F.text == "🔧 Добавить событие")
 @router.message(Command("add_maintenance"))
 async def add_maintenance_start(message: types.Message, state: FSMContext):
@@ -91,15 +86,29 @@ async def process_car_choice(callback: types.CallbackQuery, state: FSMContext):
         )
     await callback.answer()
 
+# ИЗМЕНЕНО: для категории "to" автоматически устанавливаем описание "Плановое ТО"
 @router.callback_query(AddMaintenance.waiting_for_category, F.data.startswith("maint_cat_"))
 async def process_category(callback: types.CallbackQuery, state: FSMContext):
     category = callback.data.split("_")[-1]
     await state.update_data(category=category)
-    await state.set_state(AddMaintenance.waiting_for_description)
-    await callback.message.edit_text(
-        f"Категория: {config.MAINTENANCE_CATEGORIES.get(category, category)}\n\n"
-        "Введите, что сделали (например: замена масла, шиномонтаж):"
-    )
+    
+    if category == "to":
+        # Для ТО описание фиксированное, пропускаем запрос описания
+        await state.update_data(description="Плановое ТО")
+        await state.set_state(AddMaintenance.waiting_for_cost)
+        await callback.message.edit_text(
+            f"Категория: {config.MAINTENANCE_CATEGORIES.get(category, category)}\n"
+            "Описание: Плановое ТО (автоматически)\n\n"
+            "Введите стоимость в рублях:",
+            reply_markup=get_cancel_keyboard()
+        )
+    else:
+        # Для остальных категорий запрашиваем описание
+        await state.set_state(AddMaintenance.waiting_for_description)
+        await callback.message.edit_text(
+            f"Категория: {config.MAINTENANCE_CATEGORIES.get(category, category)}\n\n"
+            "Введите, что сделали (например: замена масла, шиномонтаж):"
+        )
     await callback.answer()
 
 @router.message(AddMaintenance.waiting_for_description)
@@ -143,7 +152,7 @@ async def process_mileage(message: types.Message, state: FSMContext):
         data = await state.get_data()
         car_id = data['car_id']
         category = data['category']
-        description = data['description']
+        description = data['description']  # уже сохранено
         cost = data['cost']
 
         with next(get_db()) as db:
