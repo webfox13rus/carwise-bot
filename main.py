@@ -21,8 +21,9 @@ from handlers.export import router as export_router
 from handlers.edit import router as edit_router
 from handlers.photos import router as photos_router
 from handlers.feedback import router as feedback_router
-from handlers.feedback_admin import router as feedback_admin_router  # <-- важно
+from handlers.feedback_admin import router as feedback_admin_router
 from handlers.navigation import router as navigation_router
+from handlers.seasonal import send_seasonal_reminders  # <-- новый импорт
 
 logging.basicConfig(
     level=logging.INFO,
@@ -198,21 +199,20 @@ async def main():
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
 
-    # Подключаем все роутеры (важен порядок: сначала общие, потом специфичные)
-    dp.include_router(navigation_router)      # обрабатывает нажатия на пункты главного меню и "Назад"
-    dp.include_router(start_router)            # /start, /help
-    dp.include_router(cars_router)             # управление автомобилями
-    dp.include_router(fuel_router)             # заправки
-    dp.include_router(maintenance_router)      # обслуживание
-    dp.include_router(reports_router)          # статистика
-    dp.include_router(insurance_router)        # страховки
-    dp.include_router(reminders_router)        # напоминания ТО
-    dp.include_router(parts_router)            # плановые замены
-    dp.include_router(export_router)           # экспорт данных
-    dp.include_router(edit_router)             # редактирование записей
-    dp.include_router(photos_router)           # просмотр чеков
-    dp.include_router(feedback_router)         # отправка сообщений администратору
-    dp.include_router(feedback_admin_router)   # обработка ответов администратора из канала
+    dp.include_router(navigation_router)
+    dp.include_router(start_router)
+    dp.include_router(cars_router)
+    dp.include_router(fuel_router)
+    dp.include_router(maintenance_router)
+    dp.include_router(reports_router)
+    dp.include_router(insurance_router)
+    dp.include_router(reminders_router)
+    dp.include_router(parts_router)
+    dp.include_router(export_router)
+    dp.include_router(edit_router)
+    dp.include_router(photos_router)
+    dp.include_router(feedback_router)
+    dp.include_router(feedback_admin_router)
 
     await bot.delete_webhook(drop_pending_updates=True)
     
@@ -220,8 +220,10 @@ async def main():
     scheduler.add_job(check_insurances, 'cron', hour=10, minute=0, args=(bot,))
     scheduler.add_job(check_maintenance_reminders, 'cron', hour=9, minute=0, args=(bot,))
     scheduler.add_job(check_parts_reminders, 'cron', hour=8, minute=0, args=(bot,))
+    # Сезонные напоминания (каждый день в 12:00 UTC)
+    scheduler.add_job(send_seasonal_reminders, 'cron', hour=12, minute=0, args=(bot,))
     scheduler.start()
-    logger.info("⏰ Планировщик напоминаний запущен (страховки 10:00, ТО 9:00, детали 8:00 UTC)")
+    logger.info("⏰ Планировщик напоминаний запущен (страховки 10:00, ТО 9:00, детали 8:00, сезонные 12:00 UTC)")
 
     logger.info("🚀 CarWise Bot запущен на Railway!")
     
