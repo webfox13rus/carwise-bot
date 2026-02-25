@@ -86,7 +86,6 @@ async def process_car_choice(callback: types.CallbackQuery, state: FSMContext):
         )
     await callback.answer()
 
-# ИЗМЕНЕНО: для категории "to" автоматически устанавливаем описание "Плановое ТО"
 @router.callback_query(AddMaintenance.waiting_for_category, F.data.startswith("maint_cat_"))
 async def process_category(callback: types.CallbackQuery, state: FSMContext):
     category = callback.data.split("_")[-1]
@@ -99,7 +98,10 @@ async def process_category(callback: types.CallbackQuery, state: FSMContext):
         await callback.message.edit_text(
             f"Категория: {config.MAINTENANCE_CATEGORIES.get(category, category)}\n"
             "Описание: Плановое ТО (автоматически)\n\n"
-            "Введите стоимость в рублях:",
+            "Введите стоимость в рублях:"
+        )
+        await callback.message.answer(
+            "Введите стоимость:",
             reply_markup=get_cancel_keyboard()
         )
     else:
@@ -108,6 +110,11 @@ async def process_category(callback: types.CallbackQuery, state: FSMContext):
         await callback.message.edit_text(
             f"Категория: {config.MAINTENANCE_CATEGORIES.get(category, category)}\n\n"
             "Введите, что сделали (например: замена масла, шиномонтаж):"
+        )
+        # Если нужно показать клавиатуру отмены, можно добавить отдельное сообщение
+        await callback.message.answer(
+            "Для отмены нажмите кнопку ниже:",
+            reply_markup=get_cancel_keyboard()
         )
     await callback.answer()
 
@@ -152,7 +159,7 @@ async def process_mileage(message: types.Message, state: FSMContext):
         data = await state.get_data()
         car_id = data['car_id']
         category = data['category']
-        description = data['description']  # уже сохранено
+        description = data['description']
         cost = data['cost']
 
         with next(get_db()) as db:
@@ -172,7 +179,8 @@ async def process_mileage(message: types.Message, state: FSMContext):
                 await state.set_state(AddMaintenance.waiting_for_part_interval_mileage)
                 await message.answer(
                     "Укажите интервал замены этого элемента по пробегу (в км).\n"
-                    "Если интервал не нужен, отправьте 0:"
+                    "Если интервал не нужен, отправьте 0:",
+                    reply_markup=get_cancel_keyboard()
                 )
                 return
             else:
@@ -191,7 +199,6 @@ async def process_mileage(message: types.Message, state: FSMContext):
     except ValueError:
         await message.answer("❌ Введите число (например, 150000)")
 
-# Обработка интервала по пробегу для запчасти/жидкости
 @router.message(AddMaintenance.waiting_for_part_interval_mileage)
 async def process_part_interval_mileage(message: types.Message, state: FSMContext):
     if message.text == "❌ Отмена":
@@ -207,7 +214,8 @@ async def process_part_interval_mileage(message: types.Message, state: FSMContex
         await state.set_state(AddMaintenance.waiting_for_part_interval_months)
         await message.answer(
             "Укажите интервал замены по времени (в месяцах).\n"
-            "Если интервал не нужен, отправьте 0:"
+            "Если интервал не нужен, отправьте 0:",
+            reply_markup=get_cancel_keyboard()
         )
     except ValueError:
         await message.answer("❌ Введите число (например, 10000)")
