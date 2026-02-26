@@ -13,6 +13,7 @@ from keyboards.main_menu import (
 
 router = Router()
 
+# Обработчики пунктов главного меню
 @router.message(F.text == "🚗 Мои авто")
 async def go_to_cars(message: types.Message, state: FSMContext):
     await state.clear()
@@ -43,6 +44,7 @@ async def go_to_more(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer("Дополнительные функции:", reply_markup=get_more_submenu())
 
+# Обработчик кнопки "Назад" (возврат в главное меню)
 @router.message(F.text == "◀️ Назад")
 async def back_to_main(message: types.Message, state: FSMContext):
     await state.clear()
