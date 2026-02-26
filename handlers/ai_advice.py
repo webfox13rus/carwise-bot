@@ -64,6 +64,7 @@ async def get_ai_advice(car_data: dict) -> str:
 # Обработчик – ТЕКСТ БЕЗ ЭМОДЗИ, точно как в кнопке
 @router.message(F.text == "Расширенная статистика (Premium)")
 async def premium_stats(message: types.Message):
+    logger.info(f"Кнопка нажата пользователем {message.from_user.id}")
     with next(get_db()) as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
