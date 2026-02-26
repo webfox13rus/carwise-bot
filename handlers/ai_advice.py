@@ -19,7 +19,7 @@ else:
     client = None
     logger.warning("GEMINI_API_KEY не задан! AI-советы работать не будут.")
 
-MODEL_NAME = "gemini-1.5-flash"
+MODEL_NAME = "gemini-1.5-flash-latest"
 
 async def get_ai_advice(car_data: dict) -> str:
     if not client:
