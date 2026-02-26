@@ -7,12 +7,12 @@ class Config:
     BOT_TOKEN = os.getenv("BOT_TOKEN")
     DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///carwise.db")
     
-    # Администраторы
+    # Администраторы (ваш ID 712843452)
     default_admin_ids = [712843452]
     env_admin_ids = [int(id.strip()) for id in os.getenv("ADMIN_IDS", "").split(",") if id.strip()]
     ADMIN_IDS = env_admin_ids if env_admin_ids else default_admin_ids
     
-    # ID канала обратной связи
+    # ID канала обратной связи (супергруппа)
     FEEDBACK_CHAT_ID = os.getenv("FEEDBACK_CHAT_ID")
     if FEEDBACK_CHAT_ID:
         try:
@@ -20,8 +20,8 @@ class Config:
         except ValueError:
             FEEDBACK_CHAT_ID = None
     
-    # Google Gemini API
-    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+    # GigaChat API (Client Secret / Authorization Key)
+    GIGACHAT_AUTH_KEY = os.getenv("GIGACHAT_AUTH_KEY", "")
     
     DEFAULT_FUEL_TYPES = {
         "92": "АИ-92",
