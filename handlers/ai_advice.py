@@ -1,6 +1,7 @@
 import logging
 import asyncio
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from datetime import datetime, timedelta
 from aiogram import Router, types, F
 from aiogram.filters import Command
@@ -13,23 +14,23 @@ from config import config
 router = Router()
 logger = logging.getLogger(__name__)
 
-# Настройка Gemini (один раз при загрузке модуля)
+# Инициализация клиента Gemini (новая библиотека)
 if config.GEMINI_API_KEY:
-    genai.configure(api_key=config.GEMINI_API_KEY)
+    client = genai.Client(api_key=config.GEMINI_API_KEY)
 else:
+    client = None
     logger.warning("GEMINI_API_KEY не задан! AI-советы работать не будут.")
 
-# Модель Gemini 1.5 Flash (самая быстрая и дешёвая)
+# Модель Gemini 1.5 Flash (проверенное имя)
 MODEL_NAME = "gemini-1.5-flash"
 
 async def get_ai_advice(car_data: dict) -> str:
     """
     Отправляет запрос к Gemini Flash и возвращает совет.
     """
-    if not config.GEMINI_API_KEY:
+    if not client:
         return "❌ AI-советы временно недоступны (не настроен API)."
 
-    # Промпт для механика (адаптирован под Gemini, но можно оставить и по-русски)
     prompt = (
         "Ты – опытный автомеханик с 20-летним стажем. Проанализируй данные автомобиля и дай подробные, практические рекомендации по его обслуживанию. "
         "Учитывай пробег, возраст, расход топлива, историю ТО, страховки, предстоящие замены деталей. Если какие-то данные отсутствуют – отметь это. "
@@ -49,9 +50,11 @@ async def get_ai_advice(car_data: dict) -> str:
     )
 
     try:
-        model = genai.GenerativeModel(MODEL_NAME)
-        # Асинхронный вызов (библиотека поддерживает asyncio)
-        response = await model.generate_content_async(prompt)
+        # Асинхронный вызов через новую библиотеку
+        response = await client.aio.models.generate_content(
+            model=MODEL_NAME,
+            contents=prompt
+        )
         return response.text.strip()
     except Exception as e:
         logger.error(f"Gemini API error: {e}")
