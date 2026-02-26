@@ -1,10 +1,12 @@
 import logging
 import asyncio
-from google import genai
+import aiohttp
+import os
 from datetime import datetime, timedelta
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from sqlalchemy import func
+from openai import AsyncOpenAI
 
 from database import get_db, User, Car, FuelEvent, MaintenanceEvent, Insurance, Part
 from keyboards.main_menu import get_stats_submenu
@@ -13,17 +15,68 @@ from config import config
 router = Router()
 logger = logging.getLogger(__name__)
 
-if config.GEMINI_API_KEY:
-    client = genai.Client(api_key=config.GEMINI_API_KEY)
-else:
-    client = None
-    logger.warning("GEMINI_API_KEY не задан! AI-советы работать не будут.")
+# Конфигурация для GigaChat
+GIGACHAT_AUTH_KEY = config.GIGACHAT_AUTH_KEY
+# Важно: URL для API должен быть именно таким, как в документации [citation:2]
+GIGACHAT_API_URL = "https://gigachat.devices.sberbank.ru/api/v1"
 
-MODEL_NAME = "models/gemini-1.5-flash"
+# Глобальный клиент OpenAI, который мы будем использовать для запросов
+openai_client = None
+
+async def get_gigachat_access_token() -> str | None:
+    """
+    Получает access token для GigaChat по Client Secret.
+    Токен действует 30 минут, поэтому мы будем получать его перед каждым запросом,
+    если он не был получен ранее или истек. [citation:2]
+    """
+    url = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "RqUID": "6f0b1291-c7f3-43c6-bb2e-9f3efb2dc98e",  # Это статический UUID, можно оставить
+        "Authorization": f"Basic {GIGACHAT_AUTH_KEY}"
+    }
+    payload = "scope=GIGACHAT_API_PERS"  # Указываем скоуп для физических лиц [citation:1]
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            # ВАЖНО: Для работы из России может потребоваться отключить проверку SSL.
+            # В продакшене лучше этого не делать, но для теста можно использовать:
+            # connector = aiohttp.TCPConnector(ssl=False)
+            # async with aiohttp.ClientSession(connector=connector) as session:
+            async with session.post(url, headers=headers, data=payload, ssl=False) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    logger.info("GigaChat access token получен успешно")
+                    return data.get("access_token")
+                else:
+                    error_text = await resp.text()
+                    logger.error(f"Ошибка получения токена GigaChat: {resp.status} - {error_text}")
+                    return None
+    except Exception as e:
+        logger.error(f"Исключение при получении токена GigaChat: {e}")
+        return None
 
 async def get_ai_advice(car_data: dict) -> str:
-    if not client:
-        return "❌ AI-советы временно недоступны (не настроен API)."
+    """
+    Отправляет запрос к GigaChat и возвращает совет.
+    """
+    global openai_client
+
+    if not GIGACHAT_AUTH_KEY:
+        return "❌ AI-советы временно недоступны (не настроен ключ GigaChat)."
+
+    # 1. Получаем свежий access token
+    access_token = await get_gigachat_access_token()
+    if not access_token:
+        return "❌ Не удалось авторизоваться в GigaChat. Попробуйте позже."
+
+    # 2. Создаем или обновляем клиент OpenAI с новым токеном
+    openai_client = AsyncOpenAI(
+        base_url=GIGACHAT_API_URL,
+        api_key=access_token,  # В качестве api_key используем полученный токен
+        # Для отключения проверки SSL (только для теста) можно добавить:
+        # http_client=AsyncOpenAI.http_client(verify=False) 
+    )
 
     prompt = (
         "Ты – опытный автомеханик с 20-летним стажем. Проанализируй данные автомобиля и дай подробные, практические рекомендации по его обслуживанию. "
@@ -43,28 +96,27 @@ async def get_ai_advice(car_data: dict) -> str:
         "Дай советы по дальнейшей эксплуатации и обслуживанию."
     )
 
-    def sync_call():
-        try:
-            response = client.models.generate_content(
-                model=MODEL_NAME,
-                contents=prompt
-            )
-            return response.text
-        except Exception as e:
-            logger.error(f"Ошибка внутри sync_call: {e}")
-            raise
-
     try:
-        response_text = await asyncio.to_thread(sync_call)
-        return response_text.strip()
+        # 3. Отправляем запрос в GigaChat
+        response = await openai_client.chat.completions.create(
+            model="GigaChat-2-Lite",  # или GigaChat-2-Pro, GigaChat-2-Max
+            messages=[
+                {"role": "system", "content": "Ты – опытный автомеханик, дающий полезные советы."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=1000
+        )
+        advice = response.choices[0].message.content
+        return advice.strip() if advice else "❌ Не удалось получить совет от GigaChat."
+
     except Exception as e:
-        logger.error(f"Gemini API error: {e}")
+        logger.error(f"Ошибка при запросе к GigaChat: {e}")
         return "❌ Произошла ошибка при генерации совета. Попробуйте позже."
 
-# Обработчик – ТЕКСТ БЕЗ ЭМОДЗИ, точно как в кнопке
+# --- Далее идет функция premium_stats, она остается практически без изменений ---
 @router.message(F.text == "Расширенная статистика (Premium)")
 async def premium_stats(message: types.Message):
-    logger.info(f"Кнопка нажата пользователем {message.from_user.id}")
     with next(get_db()) as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
@@ -89,7 +141,6 @@ async def premium_stats(message: types.Message):
 
         wait_msg = await message.answer("⏳ Запрос обрабатывается, это может занять несколько секунд...")
 
-        # Для простоты берём первый автомобиль (можно доработать выбор)
         car = cars[0]
 
         # Расчёт среднего расхода
