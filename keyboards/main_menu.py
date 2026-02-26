@@ -63,14 +63,14 @@ def get_insurance_submenu():
     )
     return keyboard
 
-# Подменю статистики с кнопкой премиум
+# Подменю статистики – КНОПКА БЕЗ ЭМОДЗИ
 def get_stats_submenu():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📊 Краткая статистика")],
             [KeyboardButton(text="📈 Детальная статистика")],
             [KeyboardButton(text="📤 Экспорт данных")],
-            [KeyboardButton(text="🤖 Расширенная статистика (Premium)")],  # <-- новая кнопка
+            [KeyboardButton(text="Расширенная статистика (Premium)")],   # <-- без эмодзи
             [KeyboardButton(text="◀️ Назад")]
         ],
         resize_keyboard=True
