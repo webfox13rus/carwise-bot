@@ -85,7 +85,7 @@ async def get_ai_advice(car_data: dict) -> str:
 
     try:
         response = await openai_client.chat.completions.create(
-            model="GigaChat-2-Lite",
+            model="GigaChat-2",
             messages=[
                 {"role": "system", "content": "Ты – опытный автомеханик, дающий полезные советы."},
                 {"role": "user", "content": prompt}
