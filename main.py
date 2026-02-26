@@ -24,6 +24,7 @@ from handlers.feedback import router as feedback_router
 from handlers.feedback_admin import router as feedback_admin_router
 from handlers.navigation import router as navigation_router
 from handlers.seasonal import send_seasonal_reminders  # <-- новый импорт
+from handlers.ai_advice import router as ai_advice_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -213,6 +214,7 @@ async def main():
     dp.include_router(photos_router)
     dp.include_router(feedback_router)
     dp.include_router(feedback_admin_router)
+    dp.include_router(ai_advice_router)
 
     await bot.delete_webhook(drop_pending_updates=True)
     
