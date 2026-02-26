@@ -1,7 +1,6 @@
 import logging
 import asyncio
 from google import genai
-from google.genai import types
 from datetime import datetime, timedelta
 from aiogram import Router, types, F
 from aiogram.filters import Command
@@ -14,19 +13,19 @@ from config import config
 router = Router()
 logger = logging.getLogger(__name__)
 
-# Инициализация клиента Gemini (новая библиотека)
+# Инициализация клиента Gemini
 if config.GEMINI_API_KEY:
     client = genai.Client(api_key=config.GEMINI_API_KEY)
 else:
     client = None
     logger.warning("GEMINI_API_KEY не задан! AI-советы работать не будут.")
 
-# Модель Gemini 1.5 Flash (проверенное имя)
 MODEL_NAME = "gemini-1.5-flash"
 
 async def get_ai_advice(car_data: dict) -> str:
     """
     Отправляет запрос к Gemini Flash и возвращает совет.
+    Используем синхронный вызов в отдельном потоке, чтобы избежать проблем с aiohttp.
     """
     if not client:
         return "❌ AI-советы временно недоступны (не настроен API)."
@@ -49,13 +48,18 @@ async def get_ai_advice(car_data: dict) -> str:
         "Дай советы по дальнейшей эксплуатации и обслуживанию."
     )
 
-    try:
-        # Асинхронный вызов через новую библиотеку
-        response = await client.aio.models.generate_content(
+    def sync_call():
+        # Синхронный вызов
+        response = client.models.generate_content(
             model=MODEL_NAME,
             contents=prompt
         )
-        return response.text.strip()
+        return response.text
+
+    try:
+        # Запускаем синхронную функцию в отдельном потоке
+        response_text = await asyncio.to_thread(sync_call)
+        return response_text.strip()
     except Exception as e:
         logger.error(f"Gemini API error: {e}")
         return "❌ Произошла ошибка при генерации совета. Попробуйте позже."
@@ -68,7 +72,6 @@ async def premium_stats(message: types.Message):
             await message.answer("Сначала зарегистрируйтесь, отправив /start")
             return
 
-        # Проверка премиум-статуса или администратора
         is_admin = message.from_user.id in config.ADMIN_IDS
         if not user.is_premium and not is_admin:
             await message.answer(
@@ -85,10 +88,8 @@ async def premium_stats(message: types.Message):
             await message.answer("У вас нет автомобилей.", reply_markup=get_stats_submenu())
             return
 
-        # Отправляем сообщение о начале обработки
         wait_msg = await message.answer("⏳ Запрос обрабатывается, это может занять несколько секунд...")
 
-        # Берём первый автомобиль (можно модифицировать для выбора, если их несколько)
         car = cars[0]
 
         # Расчёт среднего расхода
@@ -151,7 +152,6 @@ async def premium_stats(message: types.Message):
 
         advice = await get_ai_advice(car_data)
 
-        # Удаляем сообщение о загрузке и отправляем результат
         await wait_msg.delete()
         await message.answer(
             f"🤖 *AI-совет для {car.brand} {car.model}:*\n\n{advice}",
