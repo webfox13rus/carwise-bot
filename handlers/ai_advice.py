@@ -19,13 +19,11 @@ logger = logging.getLogger(__name__)
 GIGACHAT_AUTH_KEY = config.GIGACHAT_AUTH_KEY
 GIGACHAT_API_URL = "https://gigachat.devices.sberbank.ru/api/v1"
 
-# Создаём кастомный httpx клиент с отключенной проверкой SSL
-# (для работы в РФ, где могут отсутствовать корневые сертификаты)
+# Кастомный httpx клиент с отключённой проверкой SSL (для РФ)
 ssl_context = ssl.create_default_context()
 ssl_context.check_hostname = False
 ssl_context.verify_mode = ssl.CERT_NONE
-
-http_client = httpx.AsyncClient(verify=False)  # полностью отключаем проверку SSL
+http_client = httpx.AsyncClient(verify=False)
 
 async def get_gigachat_access_token() -> str | None:
     """Получает access token для GigaChat."""
@@ -38,7 +36,6 @@ async def get_gigachat_access_token() -> str | None:
     payload = "scope=GIGACHAT_API_PERS"
 
     try:
-        # Используем aiohttp с отключенным SSL для запроса токена
         connector = aiohttp.TCPConnector(ssl=False)
         async with aiohttp.ClientSession(connector=connector) as session:
             async with session.post(url, headers=headers, data=payload) as resp:
@@ -62,11 +59,10 @@ async def get_ai_advice(car_data: dict) -> str:
     if not access_token:
         return "❌ Не удалось авторизоваться в GigaChat. Попробуйте позже."
 
-    # Создаём клиент OpenAI с отключенной проверкой SSL
     openai_client = AsyncOpenAI(
         base_url=GIGACHAT_API_URL,
         api_key=access_token,
-        http_client=http_client  # используем наш кастомный клиент
+        http_client=http_client
     )
 
     prompt = (
@@ -103,5 +99,99 @@ async def get_ai_advice(car_data: dict) -> str:
         logger.error(f"Ошибка при запросе к GigaChat: {e}")
         return "❌ Произошла ошибка при генерации совета. Попробуйте позже."
 
-# Функция premium_stats (без изменений, остаётся как в предыдущем ответе)
-# ... (скопируйте её из предыдущего сообщения)
+# ---------- ДОБАВЛЕННЫЙ ОБРАБОТЧИК ДЛЯ КНОПКИ ----------
+@router.message(F.text == "Расширенная статистика (Premium)")
+async def premium_stats(message: types.Message):
+    with next(get_db()) as db:
+        user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
+        if not user:
+            await message.answer("Сначала зарегистрируйтесь, отправив /start")
+            return
+
+        is_admin = message.from_user.id in config.ADMIN_IDS
+        if not user.is_premium and not is_admin:
+            await message.answer(
+                "❌ *Функция доступна только для премиум-пользователей.*\n\n"
+                "Чтобы получить доступ к расширенной статистике с AI-советами, приобретите подписку. "
+                "Подписка находится в разработке, скоро будет доступна.",
+                parse_mode="Markdown",
+                reply_markup=get_stats_submenu()
+            )
+            return
+
+        cars = db.query(Car).filter(Car.user_id == user.id, Car.is_active == True).all()
+        if not cars:
+            await message.answer("У вас нет автомобилей.", reply_markup=get_stats_submenu())
+            return
+
+        wait_msg = await message.answer("⏳ Запрос обрабатывается, это может занять несколько секунд...")
+
+        # Для простоты берём первый автомобиль
+        car = cars[0]
+
+        # Расчёт среднего расхода
+        fuel_events = db.query(FuelEvent).filter(FuelEvent.car_id == car.id).order_by(FuelEvent.date.desc()).limit(10).all()
+        if len(fuel_events) >= 2:
+            total_liters = sum(ev.liters for ev in fuel_events if ev.liters)
+            total_distance = 0
+            prev = None
+            for ev in sorted(fuel_events, key=lambda x: x.date):
+                if prev and ev.mileage and prev.mileage and ev.mileage > prev.mileage:
+                    total_distance += ev.mileage - prev.mileage
+                prev = ev
+            if total_distance > 0:
+                avg_consumption = (total_liters / total_distance) * 100
+            else:
+                avg_consumption = 0
+        else:
+            avg_consumption = 0
+
+        # Страховка
+        insurances = db.query(Insurance).filter(Insurance.car_id == car.id).all()
+        if insurances:
+            nearest = min(insurances, key=lambda x: x.end_date)
+            insurance_date = nearest.end_date.strftime('%d.%m.%Y')
+            insurance_days = (nearest.end_date.date() - datetime.now().date()).days
+        else:
+            insurance_date = "не оформлена"
+            insurance_days = "—"
+
+        # Детали к замене
+        parts = db.query(Part).filter(Part.car_id == car.id).all()
+        parts_list = []
+        for part in parts:
+            if part.interval_mileage and part.last_mileage is not None:
+                next_mileage = part.last_mileage + part.interval_mileage
+                remaining = next_mileage - car.current_mileage
+                if remaining > 0 and remaining < 10000:
+                    parts_list.append(f"{part.name} (осталось {remaining:,.0f} км)")
+            if part.interval_months and part.last_date is not None:
+                next_date = part.last_date + timedelta(days=30 * part.interval_months)
+                days_left = (next_date.date() - datetime.now().date()).days
+                if days_left > 0 and days_left < 90:
+                    parts_list.append(f"{part.name} (осталось {days_left} дн.)")
+        parts_str = ", ".join(parts_list) if parts_list else "нет ближайших замен"
+
+        car_data = {
+            "brand": car.brand,
+            "model": car.model,
+            "year": car.year,
+            "mileage": f"{car.current_mileage:,.0f}",
+            "consumption": f"{avg_consumption:.1f}" if avg_consumption > 0 else "нет данных",
+            "last_to_mileage": f"{car.last_maintenance_mileage:,.0f}" if car.last_maintenance_mileage else "нет данных",
+            "last_to_date": car.last_maintenance_date.strftime('%d.%m.%Y') if car.last_maintenance_date else "нет данных",
+            "to_mileage_interval": f"{car.to_mileage_interval:,.0f}" if car.to_mileage_interval else "не задан",
+            "to_months_interval": f"{car.to_months_interval}" if car.to_months_interval else "не задан",
+            "insurance_date": insurance_date,
+            "insurance_days": str(insurance_days),
+            "parts_list": parts_str
+        }
+
+        advice = await get_ai_advice(car_data)
+
+        await wait_msg.delete()
+        await message.answer(
+            f"🤖 *AI-совет для {car.brand} {car.model}:*\n\n{advice}",
+            parse_mode="Markdown",
+            reply_markup=get_stats_submenu()
+        )
