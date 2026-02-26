@@ -63,20 +63,20 @@ def get_insurance_submenu():
     )
     return keyboard
 
-# Подменю статистики (теперь с экспортом)
+# Подменю статистики с кнопкой премиум
 def get_stats_submenu():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📊 Краткая статистика")],
             [KeyboardButton(text="📈 Детальная статистика")],
-            [KeyboardButton(text="📤 Экспорт данных")],   # перенесено сюда
+            [KeyboardButton(text="📤 Экспорт данных")],
+            [KeyboardButton(text="🤖 Расширенная статистика (Premium)")],  # <-- новая кнопка
             [KeyboardButton(text="◀️ Назад")]
         ],
         resize_keyboard=True
     )
     return keyboard
 
-# Подменю «Ещё» (без экспорта)
 def get_more_submenu():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
