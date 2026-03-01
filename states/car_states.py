@@ -7,9 +7,13 @@ class AddCarStates(StatesGroup):
     waiting_for_model_manual = State()
     waiting_for_year = State()
     waiting_for_name = State()
+    waiting_for_vin = State()          # новое состояние
     waiting_for_mileage = State()
     waiting_for_fuel_type = State()
 
 class MileageUpdateStates(StatesGroup):
     waiting_for_car_choice = State()
     waiting_for_mileage = State()
+
+class DeleteCarStates(StatesGroup):
+    waiting_for_confirmation = State()
