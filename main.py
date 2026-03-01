@@ -11,6 +11,7 @@ from config import config
 from database import init_db, SessionLocal, Insurance, Car, User, Part
 
 # Импорты всех роутеров
+from handlers.monthly_reports import send_monthly_reports
 from handlers.start import router as start_router
 from handlers.cars import router as cars_router
 from handlers.fuel import router as fuel_router
@@ -227,6 +228,7 @@ async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     
     # Настройка планировщика
+    scheduler.add_job(send_monthly_reports, 'cron', hour=10, minute=0, args=(bot,))
     scheduler = AsyncIOScheduler()
     scheduler.add_job(check_insurances, 'cron', hour=10, minute=0, args=(bot,))
     scheduler.add_job(check_maintenance_reminders, 'cron', hour=9, minute=0, args=(bot,))
