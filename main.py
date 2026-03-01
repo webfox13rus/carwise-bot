@@ -27,6 +27,7 @@ from handlers.feedback_admin import router as feedback_admin_router
 from handlers.navigation import router as navigation_router
 from handlers.ai_advice import router as ai_advice_router
 from handlers.monthly_reports import router as monthly_reports_router
+from handlers.vin_search import router as vin_router
 # Импортируем функцию для планировщика
 from handlers.monthly_reports import send_monthly_reports
 
@@ -231,6 +232,7 @@ async def main():
     dp.include_router(feedback_admin_router)
     dp.include_router(ai_advice_router)
     dp.include_router(monthly_reports_router)
+    dp.include_router(vin_router)
     # Если есть файл seasonal.py, раскомментируйте:
     # dp.include_router(seasonal_router)
 
