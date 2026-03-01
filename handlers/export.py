@@ -11,7 +11,8 @@ from config import config
 
 router = Router()
 
-@router.message(F.text.in_(["📤 Экспорт данных", "📤 Экспорт в CSV"]))
+# Добавлен новый вариант текста кнопки
+@router.message(F.text.in_(["📤 Экспорт данных (Premium)", "📤 Экспорт данных", "📤 Экспорт в CSV"]))
 @router.message(Command("export"))
 async def export_data(message: types.Message):
     with next(get_db()) as db:
