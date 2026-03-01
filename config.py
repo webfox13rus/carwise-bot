@@ -6,7 +6,8 @@ load_dotenv()
 class Config:
     BOT_TOKEN = os.getenv("BOT_TOKEN")
     DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///carwise.db")
-    
+    AUTODOC_API_KEY = os.getenv("AUTODOC_API_KEY", "")
+  
     # Администраторы (ваш ID 712843452)
     default_admin_ids = [712843452]
     env_admin_ids = [int(id.strip()) for id in os.getenv("ADMIN_IDS", "").split(",") if id.strip()]
