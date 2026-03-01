@@ -38,6 +38,7 @@ class Car(Base):
     model = Column(String, nullable=False)
     year = Column(Integer, nullable=False)
     name = Column(String, nullable=True)
+    vin = Column(String, nullable=True, index=True)  # новое поле для VIN
     current_mileage = Column(Float, default=0)
     fuel_type = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
