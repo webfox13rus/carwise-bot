@@ -7,12 +7,12 @@ router = Router()
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
     await message.answer(
-        "🚗 *Добро пожаловать в CarWise Bot!*\n\n"
-        "Я помогу вам вести полный учёт расходов на автомобиль: заправки, обслуживание, страховки, а также напомню о приближающихся событиях.\n\n"
-        "Используйте кнопки меню или команду /help для подробной информации.",
-        parse_mode="Markdown",
-        reply_markup=get_main_menu()
-    )
+    "🚗 *Добро пожаловать в CarWise Bot!*\n\n"
+    "Я помогу вам вести полный учёт расходов на автомобиль...\n\n"
+    "© 2026 CarWise Bot. Все права защищены. Не для коммерческого использования.",
+    parse_mode="Markdown",
+    reply_markup=get_main_menu()
+)
 
 @router.message(Command("help"))
 @router.message(F.text == "📞 Помощь / О боте")
@@ -88,5 +88,6 @@ async def cmd_help(message: types.Message):
         "Удачного использования!"
     )
     await message.answer(help_text, parse_mode="Markdown", reply_markup=get_main_menu())
+
 
 
