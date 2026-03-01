@@ -69,13 +69,11 @@ def get_stats_submenu():
             [KeyboardButton(text="📊 Краткая статистика")],
             [KeyboardButton(text="📈 Детальная статистика")],
             [KeyboardButton(text="📤 Экспорт данных")],
-            [KeyboardButton(text="📈 Сравнение расходов (Premium)")],   # новая кнопка
+            [KeyboardButton(text="📈 Сравнение расходов (Premium)")],
             [KeyboardButton(text="Расширенная статистика (Premium)")],
             [KeyboardButton(text="◀️ Назад")]
         ],
         resize_keyboard=True
-    )
-    return keyboard
     )
     return keyboard
 
