@@ -12,7 +12,6 @@ from database import init_db, SessionLocal, Insurance, Car, User, Part
 
 # Импорты всех роутеров
 from handlers.start import router as start_router
-from handlers.vin_search import router as vin_router
 from handlers.cars import router as cars_router
 from handlers.fuel import router as fuel_router
 from handlers.maintenance import router as maintenance_router
@@ -219,7 +218,6 @@ async def main():
     # Подключаем все роутеры
     dp.include_router(navigation_router)
     dp.include_router(start_router)
-    dp.include_router(vin_router)
     dp.include_router(cars_router)
     dp.include_router(fuel_router)
     dp.include_router(maintenance_router)
