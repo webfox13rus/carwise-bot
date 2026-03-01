@@ -7,10 +7,10 @@ from aiogram.types import BufferedInputFile
 
 from database import get_db, User, Car, FuelEvent, MaintenanceEvent, Insurance, Part
 from keyboards.main_menu import get_stats_submenu, get_main_menu
+from config import config
 
 router = Router()
 
-# Обрабатываем оба возможных текста кнопки (старый и новый)
 @router.message(F.text.in_(["📤 Экспорт данных", "📤 Экспорт в CSV"]))
 @router.message(Command("export"))
 async def export_data(message: types.Message):
@@ -18,6 +18,17 @@ async def export_data(message: types.Message):
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
             await message.answer("Сначала зарегистрируйтесь, отправив /start")
+            return
+
+        # Проверка премиум-статуса (админы тоже имеют доступ)
+        is_admin = message.from_user.id in config.ADMIN_IDS
+        if not user.is_premium and not is_admin:
+            await message.answer(
+                "❌ *Экспорт данных* доступен только для премиум-пользователей.\n\n"
+                "Оформите подписку, чтобы выгружать все свои данные в CSV для анализа в Excel.",
+                parse_mode="Markdown",
+                reply_markup=get_stats_submenu()
+            )
             return
 
         cars = db.query(Car).filter(Car.user_id == user.id, Car.is_active == True).all()
