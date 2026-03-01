@@ -92,7 +92,7 @@ async def process_category(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(category=category)
     
     if category == "to":
-        # Для ТО описание фиксированное, пропускаем запрос описания
+        # Для ТО описание фиксированное
         await state.update_data(description="Плановое ТО")
         await state.set_state(AddMaintenance.waiting_for_cost)
         await callback.message.edit_text(
@@ -104,18 +104,34 @@ async def process_category(callback: types.CallbackQuery, state: FSMContext):
             "Введите стоимость:",
             reply_markup=get_cancel_keyboard()
         )
+    
     else:
-        # Для остальных категорий запрашиваем описание
+        # Для остальных категорий запрашиваем описание с примером, зависящим от категории
         await state.set_state(AddMaintenance.waiting_for_description)
+        
+        # Выбираем пример в зависимости от категории
+        if category == "parts":
+            example = "например: тормозные колодки, свечи зажигания"
+        elif category == "fluids":
+            example = "например: масло моторное, антифриз"
+        elif category == "tires":
+            example = "например: шиномонтаж, балансировка"
+        elif category == "wash":
+            example = "например: мойка кузова, химчистка"
+        elif category == "repair":
+            example = "например: ремонт подвески, диагностика"
+        else:
+            example = "например: замена масла, шиномонтаж"  # для других категорий (другое)
+        
         await callback.message.edit_text(
             f"Категория: {config.MAINTENANCE_CATEGORIES.get(category, category)}\n\n"
-            "Введите, что сделали (например: замена масла, шиномонтаж):"
+            f"Введите, что сделали ({example}):"
         )
-        # Если нужно показать клавиатуру отмены, можно добавить отдельное сообщение
         await callback.message.answer(
             "Для отмены нажмите кнопку ниже:",
             reply_markup=get_cancel_keyboard()
         )
+    
     await callback.answer()
 
 @router.message(AddMaintenance.waiting_for_description)
