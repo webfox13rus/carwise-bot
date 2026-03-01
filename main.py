@@ -27,6 +27,9 @@ from handlers.feedback_admin import router as feedback_admin_router
 from handlers.navigation import router as navigation_router
 from handlers.ai_advice import router as ai_advice_router
 from handlers.monthly_reports import router as monthly_reports_router
+# Импортируем функцию для планировщика
+from handlers.monthly_reports import send_monthly_reports
+
 # Если есть файл seasonal.py и функция send_seasonal_reminders, раскомментируйте:
 # from handlers.seasonal import router as seasonal_router
 # from handlers.seasonal import send_seasonal_reminders
