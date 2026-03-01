@@ -80,6 +80,7 @@ def get_stats_submenu():
 def get_more_submenu():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
+            [KeyboardButton(text="🔍 Поиск по VIN")],  # новая кнопка
             [KeyboardButton(text="📸 Все чеки")],
             [KeyboardButton(text="📞 Помощь / О боте")],
             [KeyboardButton(text="✉️ Связаться с админом")],
