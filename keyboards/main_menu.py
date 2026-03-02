@@ -1,4 +1,13 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from config import config
+from database import get_db, Admin
+
+def is_admin(user_id: int) -> bool:
+    if user_id in config.ADMIN_IDS:
+        return True
+    with next(get_db()) as db:
+        admin = db.query(Admin).filter(Admin.telegram_id == user_id).first()
+        return admin is not None
 
 def get_main_menu():
     keyboard = ReplyKeyboardMarkup(
@@ -77,16 +86,19 @@ def get_stats_submenu():
     )
     return keyboard
 
-def get_more_submenu():
+def get_more_submenu(user_id: int = None):
+    buttons = [
+        [KeyboardButton(text="🔍 Поиск по VIN")],
+        [KeyboardButton(text="📸 Все чеки")],
+        [KeyboardButton(text="💎 Купить Premium")],
+        [KeyboardButton(text="📞 Помощь / О боте")],
+        [KeyboardButton(text="✉️ Связаться с админом")],
+        [KeyboardButton(text="◀️ Назад")]
+    ]
+    if user_id and is_admin(user_id):
+        buttons.insert(0, [KeyboardButton(text="👑 Админ-панель")])
     keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🔍 Поиск по VIN")],
-            [KeyboardButton(text="📸 Все чеки")],
-            [KeyboardButton(text="💎 Купить Premium")],          # новая кнопка
-            [KeyboardButton(text="📞 Помощь / О боте")],
-            [KeyboardButton(text="✉️ Связаться с админом")],
-            [KeyboardButton(text="◀️ Назад")]
-        ],
+        keyboard=buttons,
         resize_keyboard=True
     )
     return keyboard
