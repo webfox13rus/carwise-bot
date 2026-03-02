@@ -118,5 +118,23 @@ class Part(Base):
     
     car = relationship("Car", back_populates="parts")
 
+class Admin(Base):
+    __tablename__ = "admins"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    telegram_id = Column(Integer, unique=True, nullable=False)
+    added_by = Column(Integer, nullable=True)  # ID администратора, который добавил
+    added_at = Column(DateTime, default=datetime.utcnow)
+
+class BannedUser(Base):
+    __tablename__ = "banned_users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    telegram_id = Column(Integer, unique=True, nullable=False)
+    reason = Column(String, nullable=True)
+    banned_by = Column(Integer, nullable=True)
+    banned_at = Column(DateTime, default=datetime.utcnow)
+
+# В самом конце оставьте init_db без изменений
 def init_db():
     Base.metadata.create_all(bind=engine)
