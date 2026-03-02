@@ -68,7 +68,7 @@ def get_stats_submenu():
         keyboard=[
             [KeyboardButton(text="📊 Краткая статистика")],
             [KeyboardButton(text="📈 Детальная статистика")],
-            [KeyboardButton(text="📤 Экспорт данных (Premium)")],  # <-- изменено
+            [KeyboardButton(text="📤 Экспорт данных (Premium)")],
             [KeyboardButton(text="📈 Сравнение расходов (Premium)")],
             [KeyboardButton(text="Расширенная статистика (Premium)")],
             [KeyboardButton(text="◀️ Назад")]
@@ -80,8 +80,9 @@ def get_stats_submenu():
 def get_more_submenu():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🔍 Поиск по VIN")],  # новая кнопка
+            [KeyboardButton(text="🔍 Поиск по VIN")],
             [KeyboardButton(text="📸 Все чеки")],
+            [KeyboardButton(text="💎 Купить Premium")],          # новая кнопка
             [KeyboardButton(text="📞 Помощь / О боте")],
             [KeyboardButton(text="✉️ Связаться с админом")],
             [KeyboardButton(text="◀️ Назад")]
