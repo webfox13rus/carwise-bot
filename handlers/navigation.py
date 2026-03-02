@@ -1,6 +1,5 @@
 from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
-
 from keyboards.main_menu import (
     get_main_menu,
     get_cars_submenu,
@@ -13,7 +12,6 @@ from keyboards.main_menu import (
 
 router = Router()
 
-# Обработчики пунктов главного меню
 @router.message(F.text == "🚗 Мои авто")
 async def go_to_cars(message: types.Message, state: FSMContext):
     await state.clear()
@@ -42,9 +40,8 @@ async def go_to_stats_menu(message: types.Message, state: FSMContext):
 @router.message(F.text == "⚙️ Ещё")
 async def go_to_more(message: types.Message, state: FSMContext):
     await state.clear()
-    await message.answer("Дополнительные функции:", reply_markup=get_more_submenu())
+    await message.answer("Дополнительные функции:", reply_markup=get_more_submenu(message.from_user.id))
 
-# Обработчик кнопки "Назад" (возврат в главное меню)
 @router.message(F.text == "◀️ Назад")
 async def back_to_main(message: types.Message, state: FSMContext):
     await state.clear()
