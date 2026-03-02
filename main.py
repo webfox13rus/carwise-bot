@@ -28,8 +28,7 @@ from handlers.navigation import router as navigation_router
 from handlers.ai_advice import router as ai_advice_router
 from handlers.monthly_reports import router as monthly_reports_router
 from handlers.vin_search import router as vin_router
-# Импортируем функцию для планировщика
-from handlers.monthly_reports import send_monthly_reports
+from handlers.payment import router as payment_router          # <-- добавили
 
 # Если есть файл seasonal.py и функция send_seasonal_reminders, раскомментируйте:
 # from handlers.seasonal import router as seasonal_router
@@ -191,7 +190,6 @@ async def check_parts_reminders(bot: Bot):
 # Заглушка для сезонных напоминаний (можно удалить или реализовать позже)
 async def send_seasonal_reminders(bot: Bot):
     logger.info("🌦️ Проверка сезонных напоминаний...")
-    # Здесь будет код сезонных напоминаний
     pass
 
 async def main():
@@ -233,6 +231,8 @@ async def main():
     dp.include_router(ai_advice_router)
     dp.include_router(monthly_reports_router)
     dp.include_router(vin_router)
+    dp.include_router(payment_router)                         # <-- добавили
+
     # Если есть файл seasonal.py, раскомментируйте:
     # dp.include_router(seasonal_router)
 
@@ -245,7 +245,7 @@ async def main():
     scheduler.add_job(check_maintenance_reminders, 'cron', hour=9, minute=0, args=(bot,))
     scheduler.add_job(check_parts_reminders, 'cron', hour=8, minute=0, args=(bot,))
     scheduler.add_job(send_seasonal_reminders, 'cron', hour=12, minute=0, args=(bot,))
-    scheduler.add_job(send_monthly_reports, 'cron', hour=10, minute=0, args=(bot,))  # ежемесячные отчёты
+    scheduler.add_job(send_monthly_reports, 'cron', hour=10, minute=0, args=(bot,))
     scheduler.start()
     logger.info("⏰ Планировщик напоминаний запущен (страховки 10:00, ТО 9:00, детали 8:00, сезонные 12:00, ежемесячные отчёты 10:00 UTC)")
 
