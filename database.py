@@ -26,6 +26,7 @@ class User(Base):
     last_name = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     is_premium = Column(Boolean, default=False)
+    premium_until = Column(DateTime, nullable=True)  # дата окончания подписки
     
     cars = relationship("Car", back_populates="owner", cascade="all, delete-orphan")
 
@@ -38,7 +39,7 @@ class Car(Base):
     model = Column(String, nullable=False)
     year = Column(Integer, nullable=False)
     name = Column(String, nullable=True)
-    vin = Column(String, nullable=True, index=True)  # новое поле для VIN
+    vin = Column(String, nullable=True, index=True)
     current_mileage = Column(Float, default=0)
     fuel_type = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
@@ -67,7 +68,7 @@ class FuelEvent(Base):
     mileage = Column(Float, nullable=True)
     fuel_type = Column(String, nullable=True)
     date = Column(DateTime, default=datetime.utcnow)
-    photo_id = Column(String, nullable=True)  # file_id фото
+    photo_id = Column(String, nullable=True)
     
     car = relationship("Car", back_populates="fuel_events")
 
@@ -81,7 +82,7 @@ class MaintenanceEvent(Base):
     cost = Column(Float, nullable=False)
     mileage = Column(Float, nullable=True)
     date = Column(DateTime, default=datetime.utcnow)
-    photo_id = Column(String, nullable=True)  # file_id фото
+    photo_id = Column(String, nullable=True)
     
     car = relationship("Car", back_populates="maintenance_events")
 
@@ -96,7 +97,7 @@ class Insurance(Base):
     end_date = Column(DateTime, nullable=False)
     cost = Column(Float, nullable=False)
     notes = Column(String, nullable=True)
-    photo_id = Column(String, nullable=True)  # file_id фото
+    photo_id = Column(String, nullable=True)
     notified_7d = Column(Boolean, default=False)
     notified_3d = Column(Boolean, default=False)
     notified_expired = Column(Boolean, default=False)
