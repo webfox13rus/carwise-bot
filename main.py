@@ -5,12 +5,13 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime, timedelta
-import os
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import selectinload
 
 from config import config
-from database import init_db, SessionLocal, Insurance, Car, User, Part, Admin, BannedUser
+from database import SessionLocal, init_db, Insurance, Car, User, Part, Admin, BannedUser
 
-# Импорты всех роутеров
+# Импорты роутеров (без vin_router)
 from handlers.start import router as start_router
 from handlers.cars import router as cars_router
 from handlers.fuel import router as fuel_router
@@ -28,13 +29,8 @@ from handlers.navigation import router as navigation_router
 from handlers.ai_advice import router as ai_advice_router
 from handlers.monthly_reports import router as monthly_reports_router
 from handlers.monthly_reports import send_monthly_reports
-from handlers.vin_search import router as vin_router
 from handlers.payment import router as payment_router
 from handlers.admin import router as admin_router
-
-# Если есть файл seasonal.py и функция send_seasonal_reminders, раскомментируйте:
-# from handlers.seasonal import router as seasonal_router
-# from handlers.seasonal import send_seasonal_reminders
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,21 +40,39 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# ------------------- Вспомогательная функция для проверки бана -------------------
+async def is_user_banned(user_id: int) -> bool:
+    with SessionLocal() as db:
+        banned = db.query(BannedUser).filter(BannedUser.telegram_id == user_id).first()
+        return banned is not None
+
 # ------------------- Функции для планировщика -------------------
 async def check_insurances(bot: Bot):
     logger.info("🔍 Проверка сроков страховок...")
-    with SessionLocal() as db:
-        today = datetime.now().date()
-        insurances = db.query(Insurance).all()
-        for ins in insurances:
-            days_left = (ins.end_date.date() - today).days
-            car = ins.car
-            if not car or not car.owner:
-                continue
-            user_id = car.owner.telegram_id
+    try:
+        with SessionLocal() as db:
+            today = datetime.utcnow().date()
+            # Загружаем страховки, которые истекают в ближайшие 7 дней, с автомобилями и владельцами
+            insurances = db.query(Insurance).options(
+                selectinload(Insurance.car).selectinload(Car.owner)
+            ).filter(
+                and_(
+                    Insurance.end_date <= today + timedelta(days=7),
+                    Insurance.end_date > today
+                )
+            ).all()
 
-            if 0 < days_left <= 7 and not ins.notified_7d:
-                try:
+            for ins in insurances:
+                car = ins.car
+                if not car or not car.owner:
+                    continue
+                user_id = car.owner.telegram_id
+                if await is_user_banned(user_id):
+                    continue
+
+                days_left = (ins.end_date.date() - today).days
+
+                if days_left <= 7 and not ins.notified_7d:
                     await bot.send_message(
                         user_id,
                         f"⚠️ Напоминание о страховке!\n\n"
@@ -69,11 +83,26 @@ async def check_insurances(bot: Bot):
                     ins.notified_7d = True
                     db.commit()
                     logger.info(f"Уведомление за 7 дней отправлено пользователю {user_id}")
-                except Exception as e:
-                    logger.error(f"Ошибка отправки уведомления (7 дней): {e}")
 
-            elif 0 < days_left <= 3 and not ins.notified_3d:
-                try:
+            # Проверка на 3 дня
+            insurances_3d = db.query(Insurance).options(
+                selectinload(Insurance.car).selectinload(Car.owner)
+            ).filter(
+                and_(
+                    Insurance.end_date <= today + timedelta(days=3),
+                    Insurance.end_date > today
+                )
+            ).all()
+            for ins in insurances_3d:
+                car = ins.car
+                if not car or not car.owner:
+                    continue
+                user_id = car.owner.telegram_id
+                if await is_user_banned(user_id):
+                    continue
+
+                days_left = (ins.end_date.date() - today).days
+                if days_left <= 3 and not ins.notified_3d:
                     await bot.send_message(
                         user_id,
                         f"⚠️⚠️ СРОЧНО! Страховка на {car.brand} {car.model} "
@@ -83,11 +112,22 @@ async def check_insurances(bot: Bot):
                     ins.notified_3d = True
                     db.commit()
                     logger.info(f"Уведомление за 3 дня отправлено пользователю {user_id}")
-                except Exception as e:
-                    logger.error(f"Ошибка отправки уведомления (3 дня): {e}")
 
-            elif days_left <= 0 and not ins.notified_expired:
-                try:
+            # Проверка на истекшие
+            expired = db.query(Insurance).options(
+                selectinload(Insurance.car).selectinload(Car.owner)
+            ).filter(
+                Insurance.end_date <= today
+            ).all()
+            for ins in expired:
+                car = ins.car
+                if not car or not car.owner:
+                    continue
+                user_id = car.owner.telegram_id
+                if await is_user_banned(user_id):
+                    continue
+
+                if not ins.notified_expired:
                     await bot.send_message(
                         user_id,
                         f"❗️ СРОК СТРАХОВКИ ИСТЁК!\n\n"
@@ -98,23 +138,25 @@ async def check_insurances(bot: Bot):
                     ins.notified_expired = True
                     db.commit()
                     logger.info(f"Уведомление об истечении отправлено пользователю {user_id}")
-                except Exception as e:
-                    logger.error(f"Ошибка отправки уведомления об истечении: {e}")
+    except Exception as e:
+        logger.exception(f"Ошибка в check_insurances: {e}")
 
 async def check_maintenance_reminders(bot: Bot):
     logger.info("🔧 Проверка сроков ТО...")
-    with SessionLocal() as db:
-        today = datetime.now().date()
-        cars = db.query(Car).filter(Car.is_active == True).all()
-        for car in cars:
-            if not car.owner:
-                continue
-            user_id = car.owner.telegram_id
+    try:
+        with SessionLocal() as db:
+            today = datetime.utcnow().date()
+            cars = db.query(Car).options(selectinload(Car.owner)).filter(Car.is_active == True).all()
+            for car in cars:
+                if not car.owner:
+                    continue
+                user_id = car.owner.telegram_id
+                if await is_user_banned(user_id):
+                    continue
 
-            if car.to_mileage_interval and car.last_maintenance_mileage is not None:
-                next_mileage = car.last_maintenance_mileage + car.to_mileage_interval
-                if car.current_mileage >= next_mileage and not car.notified_to_mileage:
-                    try:
+                if car.to_mileage_interval and car.last_maintenance_mileage is not None:
+                    next_mileage = car.last_maintenance_mileage + car.to_mileage_interval
+                    if car.current_mileage >= next_mileage and not car.notified_to_mileage:
                         await bot.send_message(
                             user_id,
                             f"⚠️ Напоминание о ТО по пробегу!\n\n"
@@ -127,14 +169,11 @@ async def check_maintenance_reminders(bot: Bot):
                         car.notified_to_mileage = True
                         db.commit()
                         logger.info(f"Уведомление о ТО по пробегу отправлено пользователю {user_id}")
-                    except Exception as e:
-                        logger.error(f"Ошибка отправки уведомления о ТО (пробег): {e}")
 
-            if car.to_months_interval and car.last_maintenance_date is not None:
-                next_date = car.last_maintenance_date + timedelta(days=30 * car.to_months_interval)
-                days_left = (next_date.date() - today).days
-                if days_left <= 0 and not car.notified_to_date:
-                    try:
+                if car.to_months_interval and car.last_maintenance_date is not None:
+                    next_date = car.last_maintenance_date + timedelta(days=30 * car.to_months_interval)
+                    days_left = (next_date.date() - today).days
+                    if days_left <= 0 and not car.notified_to_date:
                         await bot.send_message(
                             user_id,
                             f"⚠️ Напоминание о ТО по времени!\n\n"
@@ -146,35 +185,41 @@ async def check_maintenance_reminders(bot: Bot):
                         car.notified_to_date = True
                         db.commit()
                         logger.info(f"Уведомление о ТО по дате отправлено пользователю {user_id}")
-                    except Exception as e:
-                        logger.error(f"Ошибка отправки уведомления о ТО (дата): {e}")
+    except Exception as e:
+        logger.exception(f"Ошибка в check_maintenance_reminders: {e}")
 
 async def check_parts_reminders(bot: Bot):
     logger.info("🔧 Проверка сроков замены деталей...")
-    with SessionLocal() as db:
-        today = datetime.now().date()
-        parts = db.query(Part).all()
-        for part in parts:
-            car = part.car
-            if not car or not car.owner:
-                continue
-            user_id = car.owner.telegram_id
-            need_notify = False
-            reasons = []
+    try:
+        with SessionLocal() as db:
+            today = datetime.utcnow().date()
+            # Загружаем детали с автомобилями и владельцами
+            parts = db.query(Part).options(
+                selectinload(Part.car).selectinload(Car.owner)
+            ).all()
+            for part in parts:
+                car = part.car
+                if not car or not car.owner:
+                    continue
+                user_id = car.owner.telegram_id
+                if await is_user_banned(user_id):
+                    continue
 
-            if part.interval_mileage and part.last_mileage is not None:
-                next_mileage = part.last_mileage + part.interval_mileage
-                if car.current_mileage >= next_mileage and not part.notified:
-                    need_notify = True
-                    reasons.append("пробег")
-            if part.interval_months and part.last_date is not None:
-                next_date = part.last_date + timedelta(days=30 * part.interval_months)
-                if next_date.date() <= today and not part.notified:
-                    need_notify = True
-                    reasons.append("время")
+                need_notify = False
+                reasons = []
 
-            if need_notify:
-                try:
+                if part.interval_mileage and part.last_mileage is not None:
+                    next_mileage = part.last_mileage + part.interval_mileage
+                    if car.current_mileage >= next_mileage and not part.notified:
+                        need_notify = True
+                        reasons.append("пробег")
+                if part.interval_months and part.last_date is not None:
+                    next_date = part.last_date + timedelta(days=30 * part.interval_months)
+                    if next_date.date() <= today and not part.notified:
+                        need_notify = True
+                        reasons.append("время")
+
+                if need_notify:
                     await bot.send_message(
                         user_id,
                         f"⚠️ Напоминание о замене детали!\n\n"
@@ -186,16 +231,16 @@ async def check_parts_reminders(bot: Bot):
                     part.notified = True
                     db.commit()
                     logger.info(f"Уведомление о детали '{part.name}' отправлено пользователю {user_id}")
-                except Exception as e:
-                    logger.error(f"Ошибка отправки уведомления о детали: {e}")
+    except Exception as e:
+        logger.exception(f"Ошибка в check_parts_reminders: {e}")
 
 async def send_seasonal_reminders(bot: Bot):
     logger.info("🌦️ Проверка сезонных напоминаний...")
-    # Здесь будет код сезонных напоминаний (заглушка)
+    # Заглушка
     pass
 
 async def main():
-    BOT_TOKEN = config.BOT_TOKEN or os.getenv("BOT_TOKEN")
+    BOT_TOKEN = config.BOT_TOKEN
     if not BOT_TOKEN:
         logger.error("❌ BOT_TOKEN не найден в переменных окружения!")
         return
@@ -222,13 +267,13 @@ async def main():
 
     bot = Bot(
         token=BOT_TOKEN,
-        default=DefaultBotProperties(parse_mode=None)
+        default=DefaultBotProperties(parse_mode='Markdown')  # Установлен Markdown
     )
     
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
 
-    # Подключаем все роутеры
+    # Подключаем все роутеры (без vin_router)
     dp.include_router(navigation_router)
     dp.include_router(start_router)
     dp.include_router(cars_router)
@@ -245,14 +290,10 @@ async def main():
     dp.include_router(feedback_admin_router)
     dp.include_router(ai_advice_router)
     dp.include_router(monthly_reports_router)
-    dp.include_router(vin_router)
     dp.include_router(payment_router)
     dp.include_router(admin_router)
 
-    # Если есть файл seasonal.py, раскомментируйте:
-    # dp.include_router(seasonal_router)
-
-    # Удаляем вебхук (если был установлен)
+    # Удаляем вебхук
     await bot.delete_webhook(drop_pending_updates=True)
     
     # Настройка планировщика
@@ -263,11 +304,10 @@ async def main():
     scheduler.add_job(send_seasonal_reminders, 'cron', hour=12, minute=0, args=(bot,))
     scheduler.add_job(send_monthly_reports, 'cron', hour=10, minute=0, args=(bot,))
     scheduler.start()
-    logger.info("⏰ Планировщик напоминаний запущен (страховки 10:00, ТО 9:00, детали 8:00, сезонные 12:00, ежемесячные отчёты 10:00 UTC)")
+    logger.info("⏰ Планировщик напоминаний запущен")
 
     logger.info("🚀 CarWise Bot запущен на Railway!")
     
-    # Запуск поллинга
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
