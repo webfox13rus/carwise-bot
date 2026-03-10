@@ -16,9 +16,12 @@ jobs:
           curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
           echo "$HOME/yandex-cloud/bin" >> $GITHUB_PATH
 
+      - name: Configure Yandex Cloud CLI
+        run: |
+          yc config set token ${{ secrets.YC_TOKEN }}
+
       - name: Deploy function
         env:
-          YC_TOKEN: ${{ secrets.YC_TOKEN }}
           YC_FUNCTION_ID: ${{ secrets.YC_FUNCTION_ID }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -31,7 +34,7 @@ jobs:
           # Создаём ZIP-архив с кодом
           zip -r function.zip . -x "*.git*" "__pycache__/*" "*.pyc" ".github/*"
 
-          # Деплоим функцию (каждую переменную передаём отдельным флагом --environment)
+          # Деплоим функцию
           yc serverless function version create \
             --function-id $YC_FUNCTION_ID \
             --runtime python311 \
