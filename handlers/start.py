@@ -20,13 +20,3 @@ async def cmd_start(message: types.Message):
         parse_mode="Markdown",
         reply_markup=get_main_menu()
     )
-
-@router.message(Command("help"))
-async def cmd_help(message: types.Message):
-    help_text = (
-        "📋 *CarWise Bot – полное руководство*\n\n"
-        "Бот предназначен для учёта всех расходов, связанных с автомобилем, и своевременных напоминаний.\n\n"
-        # ... (ваш полный текст помощи) ...
-        "© 2026 CarWise Bot. Все права защищены."
-    )
-    await message.answer(help_text, parse_mode="Markdown", reply_markup=get_main_menu())
