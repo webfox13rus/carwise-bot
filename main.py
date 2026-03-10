@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from config import config
 from database import SessionLocal, init_db, Insurance, Car, User, Part, Admin, BannedUser
 
-# Импорты всех роутеров (убедитесь, что все файлы существуют в папке handlers)
+# Импорты всех роутеров (обязательно проверьте, что все эти файлы существуют в папке handlers)
 from handlers.start import router as start_router
 from handlers.cars import router as cars_router
 from handlers.fuel import router as fuel_router
@@ -46,13 +46,13 @@ async def is_user_banned(user_id: int) -> bool:
         banned = db.query(BannedUser).filter(BannedUser.telegram_id == user_id).first()
         return banned is not None
 
-# Функции планировщика (сокращены для читаемости, оставьте свои реализации)
+# Функции планировщика (сокращены, оставьте свои реализации)
 async def check_insurances(bot: Bot):
     logger.info("🔍 Проверка сроков страховок...")
     try:
         with SessionLocal() as db:
             today = datetime.utcnow().date()
-            # ... ваш код ...
+            # ваш код...
     except Exception as e:
         logger.exception(f"Ошибка в check_insurances: {e}")
 
@@ -61,7 +61,7 @@ async def check_maintenance_reminders(bot: Bot):
     try:
         with SessionLocal() as db:
             today = datetime.utcnow().date()
-            # ... ваш код ...
+            # ваш код...
     except Exception as e:
         logger.exception(f"Ошибка в check_maintenance_reminders: {e}")
 
@@ -70,24 +70,16 @@ async def check_parts_reminders(bot: Bot):
     try:
         with SessionLocal() as db:
             today = datetime.utcnow().date()
-            # ... ваш код ...
+            # ваш код...
     except Exception as e:
         logger.exception(f"Ошибка в check_parts_reminders: {e}")
 
 async def send_monthly_reports(bot: Bot):
     logger.info("📅 Проверка ежемесячных отчётов...")
     try:
-        # ... ваш код ...
+        # ваш код...
     except Exception as e:
         logger.exception(f"Ошибка в send_monthly_reports: {e}")
-
-# Команда для пинга (чтобы бот не засыпал)
-from aiogram.types import Message
-from aiogram.filters import Command
-
-@router.message(Command("ping"))
-async def cmd_ping(message: Message):
-    await message.answer("pong")
 
 async def main():
     BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -123,7 +115,7 @@ async def main():
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
 
-    # Подключаем роутеры
+    # Подключаем все роутеры
     dp.include_router(navigation_router)
     dp.include_router(start_router)
     dp.include_router(cars_router)
@@ -143,7 +135,7 @@ async def main():
     dp.include_router(payment_router)
     dp.include_router(admin_router)
 
-    # Настройка планировщика
+    # Планировщик
     scheduler = AsyncIOScheduler()
     scheduler.add_job(check_insurances, 'cron', hour=10, minute=0, args=(bot,))
     scheduler.add_job(check_maintenance_reminders, 'cron', hour=9, minute=0, args=(bot,))
@@ -152,38 +144,11 @@ async def main():
     scheduler.start()
     logger.info("⏰ Планировщик напоминаний запущен")
 
-    # Удаляем вебхук (на случай, если был установлен ранее) – при serverless это не обязательно, но безопасно
+    # Удаляем вебхук перед запуском polling (для локального теста)
     await bot.delete_webhook(drop_pending_updates=True)
     
-    # Запускаем polling (для serverless этот режим не подойдёт, но для отладки оставим; позже перейдём на webhook)
-    # Однако для Яндекс.Cloud Functions мы должны использовать вебхук. Пока оставим polling для локального теста,
-    # но для деплоя нужно будет закомментировать polling и раскомментировать код вебхука.
-    # Ниже приведён код для вебхука, который нужно будет активировать.
-
-    # # Для работы в Яндекс.Cloud Functions раскомментируйте следующий блок:
-    # from aiohttp import web
-    # from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
-    # 
-    # WEBHOOK_PATH = f"/webhook/{BOT_TOKEN}"
-    # WEBHOOK_URL = os.getenv("WEBHOOK_URL") + WEBHOOK_PATH
-    # 
-    # async def on_startup():
-    #     await bot.set_webhook(WEBHOOK_URL)
-    # 
-    # async def on_shutdown():
-    #     await bot.delete_webhook()
-    # 
-    # app = web.Application()
-    # app.on_startup.append(on_startup)
-    # app.on_shutdown.append(on_shutdown)
-    # SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
-    # setup_application(app, dp, bot=bot)
-    # 
-    # # Запуск aiohttp сервера
-    # port = int(os.getenv("PORT", 8080))
-    # web.run_app(app, host="0.0.0.0", port=port)
-
-    # Пока оставляем polling для локального тестирования (не для продакшена!)
+    # Запуск polling
+    logger.info("🚀 Бот запускается в режиме polling...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
