@@ -28,25 +28,21 @@ jobs:
           PREMIUM_PRICE_MONTH: ${{ secrets.PREMIUM_PRICE_MONTH }}
           PREMIUM_PRICE_YEAR: ${{ secrets.PREMIUM_PRICE_YEAR }}
         run: |
-          # Собираем переменные окружения в нужный формат
-          ENV_VARS=""
-          for var in BOT_TOKEN DATABASE_URL ADMIN_IDS FEEDBACK_CHAT_ID GIGACHAT_AUTH_KEY PREMIUM_PRICE_MONTH PREMIUM_PRICE_YEAR; do
-            value="${!var}"
-            # Экранируем кавычки, если есть
-            value=$(echo "$value" | sed 's/"/\\"/g')
-            ENV_VARS="$ENV_VARS $var=\"$value\""
-          done
-          ENV_VARS=$(echo "$ENV_VARS" | sed 's/^ //')  # убираем лишний пробел в начале
-
           # Создаём ZIP-архив с кодом
-          zip -r function.zip . -x "*.git*" "__pycache__/*" "*.pyc"
+          zip -r function.zip . -x "*.git*" "__pycache__/*" "*.pyc" ".github/*"
 
-          # Деплоим функцию (если версия создаётся впервые, может потребоваться другая команда)
+          # Деплоим функцию (каждую переменную передаём отдельным флагом --environment)
           yc serverless function version create \
             --function-id $YC_FUNCTION_ID \
             --runtime python311 \
             --entrypoint main.main \
             --memory 256m \
             --execution-timeout 30s \
-            --environment "$ENV_VARS" \
+            --environment BOT_TOKEN="$BOT_TOKEN" \
+            --environment DATABASE_URL="$DATABASE_URL" \
+            --environment ADMIN_IDS="$ADMIN_IDS" \
+            --environment FEEDBACK_CHAT_ID="$FEEDBACK_CHAT_ID" \
+            --environment GIGACHAT_AUTH_KEY="$GIGACHAT_AUTH_KEY" \
+            --environment PREMIUM_PRICE_MONTH="$PREMIUM_PRICE_MONTH" \
+            --environment PREMIUM_PRICE_YEAR="$PREMIUM_PRICE_YEAR" \
             --source-path ./function.zip
