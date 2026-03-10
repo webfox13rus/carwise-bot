@@ -1,0 +1,29 @@
+name: Deploy to Yandex Cloud
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Deploy function
+        uses: yc-actions/yc-func@v2
+        with:
+          yc-token: ${{ secrets.YC_TOKEN }}
+          function-id: ${{ secrets.YC_FUNCTION_ID }}
+          runtime: 'python311'
+          entrypoint: 'main.main'
+          source: '.'
+          environment: |
+            BOT_TOKEN=${{ secrets.BOT_TOKEN }}
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            ADMIN_IDS=${{ secrets.ADMIN_IDS }}
+            FEEDBACK_CHAT_ID=${{ secrets.FEEDBACK_CHAT_ID }}
+            GIGACHAT_AUTH_KEY=${{ secrets.GIGACHAT_AUTH_KEY }}
+            PREMIUM_PRICE_MONTH=${{ secrets.PREMIUM_PRICE_MONTH }}
+            PREMIUM_PRICE_YEAR=${{ secrets.PREMIUM_PRICE_YEAR }}
