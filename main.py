@@ -50,43 +50,32 @@ async def is_user_banned(user_id: int) -> bool:
 async def check_insurances(bot: Bot):
     logger.info("🔍 Проверка сроков страховок...")
     try:
-        with SessionLocal() as db:
-            today = datetime.utcnow().date()
-            # Страховки, истекающие в ближайшие 7 дней
-            insurances = db.query(Insurance).options(
-                selectinload(Insurance.car).selectinload(Car.owner)
-            ).filter(
-                and_(
-                    Insurance.end_date <= today + timedelta(days=7),
-                    Insurance.end_date > today
-                )
-            ).all()
-            # ... логика отправки уведомлений (сокращена для краткости)
+        # TODO: добавьте реальную логику проверки страховок
+        pass
     except Exception as e:
         logger.exception(f"Ошибка в check_insurances: {e}")
 
 async def check_maintenance_reminders(bot: Bot):
     logger.info("🔧 Проверка сроков ТО...")
     try:
-        with SessionLocal() as db:
-            today = datetime.utcnow().date()
-            # ... логика
+        # TODO: добавьте реальную логику
+        pass
     except Exception as e:
         logger.exception(f"Ошибка в check_maintenance_reminders: {e}")
 
 async def check_parts_reminders(bot: Bot):
     logger.info("🔧 Проверка сроков замены деталей...")
     try:
-        with SessionLocal() as db:
-            today = datetime.utcnow().date()
-            # ... логика
+        # TODO: добавьте реальную логику
+        pass
     except Exception as e:
         logger.exception(f"Ошибка в check_parts_reminders: {e}")
 
 async def send_monthly_reports(bot: Bot):
     logger.info("📅 Ежемесячные отчёты...")
     try:
-        # ... логика
+        # TODO: добавьте реальную логику
+        pass
     except Exception as e:
         logger.exception(f"Ошибка в send_monthly_reports: {e}")
 
@@ -148,7 +137,7 @@ async def main():
     # Удаляем вебхук (если был установлен ранее)
     await bot.delete_webhook(drop_pending_updates=True)
     
-    # Настройка планировщика (работает, так как сервер не спит)
+    # Настройка планировщика
     scheduler = AsyncIOScheduler()
     scheduler.add_job(check_insurances, 'cron', hour=10, minute=0, args=(bot,))
     scheduler.add_job(check_maintenance_reminders, 'cron', hour=9, minute=0, args=(bot,))
@@ -159,7 +148,7 @@ async def main():
 
     logger.info("🚀 CarWise Bot запущен на Railway!")
     
-    # Запуск polling (для Railway это нормально)
+    # Запуск polling
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
