@@ -5,7 +5,7 @@ from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.types import BufferedInputFile
 
-from database import get_db, User, Car, FuelEvent, MaintenanceEvent, Insurance, Part
+rom database import SessionLocal, User, Car, FuelEvent, MaintenanceEvent, Insurance, Part
 from keyboards.main_menu import get_stats_submenu, get_main_menu
 from config import config
 
