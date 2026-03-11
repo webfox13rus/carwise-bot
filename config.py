@@ -5,15 +5,13 @@ load_dotenv()
 
 class Config:
     BOT_TOKEN = os.getenv("BOT_TOKEN")
-    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///carwise.db")
+    DATABASE_URL = os.getenv("DATABASE_URL")
     
-    # Администраторы (только из переменной окружения, без дефолтных)
     ADMIN_IDS = []
     env_admin_ids = os.getenv("ADMIN_IDS")
     if env_admin_ids:
         ADMIN_IDS = [int(id.strip()) for id in env_admin_ids.split(",") if id.strip()]
     
-    # ID канала обратной связи
     FEEDBACK_CHAT_ID = os.getenv("FEEDBACK_CHAT_ID")
     if FEEDBACK_CHAT_ID:
         try:
@@ -21,10 +19,8 @@ class Config:
         except ValueError:
             FEEDBACK_CHAT_ID = None
     
-    # GigaChat API
     GIGACHAT_AUTH_KEY = os.getenv("GIGACHAT_AUTH_KEY", "")
     
-    # Платежи (Telegram Stars)
     PREMIUM_PRICE_MONTH = 50
     PREMIUM_PRICE_YEAR = 500
     
