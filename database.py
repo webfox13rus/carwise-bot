@@ -13,7 +13,7 @@ class User(Base):
     __tablename__ = "users"
     
     id = Column(Integer, primary_key=True, index=True)
-    telegram_id = Column(BigInteger, unique=True, index=True, nullable=False)  # изменён тип
+    telegram_id = Column(BigInteger, unique=True, index=True, nullable=False)
     username = Column(String, nullable=True)
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
@@ -27,7 +27,7 @@ class Car(Base):
     __tablename__ = "cars"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)  # добавлен индекс
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     brand = Column(String, nullable=False)
     model = Column(String, nullable=False)
     year = Column(Integer, nullable=False)
@@ -57,15 +57,14 @@ class FuelEvent(Base):
     id = Column(Integer, primary_key=True, index=True)
     car_id = Column(Integer, ForeignKey("cars.id"), nullable=False, index=True)
     liters = Column(Float, nullable=False)
-    cost = Column(Numeric(10, 2), nullable=False)  # изменён тип
+    cost = Column(Numeric(10, 2), nullable=False)
     mileage = Column(Float, nullable=True)
     fuel_type = Column(String, nullable=True)
-    date = Column(DateTime, default=datetime.utcnow, index=True)  # добавлен индекс
+    date = Column(DateTime, default=datetime.utcnow, index=True)
     photo_id = Column(String, nullable=True)
     
     car = relationship("Car", back_populates="fuel_events")
 
-    # составной индекс для ускорения запросов по автомобилю и дате
     __table_args__ = (Index('ix_fuel_events_car_id_date', 'car_id', 'date'),)
 
 class MaintenanceEvent(Base):
@@ -75,7 +74,7 @@ class MaintenanceEvent(Base):
     car_id = Column(Integer, ForeignKey("cars.id"), nullable=False, index=True)
     category = Column(String, nullable=False)
     description = Column(String, nullable=False)
-    cost = Column(Numeric(10, 2), nullable=False)  # изменён тип
+    cost = Column(Numeric(10, 2), nullable=False)
     mileage = Column(Float, nullable=True)
     date = Column(DateTime, default=datetime.utcnow, index=True)
     photo_id = Column(String, nullable=True)
@@ -92,8 +91,8 @@ class Insurance(Base):
     policy_number = Column(String, nullable=True)
     company = Column(String, nullable=True)
     start_date = Column(DateTime, nullable=False)
-    end_date = Column(DateTime, nullable=False, index=True)  # добавлен индекс
-    cost = Column(Numeric(10, 2), nullable=False)  # изменён тип
+    end_date = Column(DateTime, nullable=False, index=True)
+    cost = Column(Numeric(10, 2), nullable=False)
     notes = Column(String, nullable=True)
     photo_id = Column(String, nullable=True)
     notified_7d = Column(Boolean, default=False)
@@ -108,10 +107,10 @@ class Part(Base):
     id = Column(Integer, primary_key=True, index=True)
     car_id = Column(Integer, ForeignKey("cars.id"), nullable=False, index=True)
     name = Column(String, nullable=False)
-    interval_mileage = Column(Float, nullable=True, index=True)  # добавлен индекс
+    interval_mileage = Column(Float, nullable=True, index=True)
     interval_months = Column(Integer, nullable=True)
-    last_mileage = Column(Float, nullable=True, index=True)  # добавлен индекс
-    last_date = Column(DateTime, nullable=True, index=True)  # добавлен индекс
+    last_mileage = Column(Float, nullable=True, index=True)
+    last_date = Column(DateTime, nullable=True, index=True)
     notified = Column(Boolean, default=False)
     
     car = relationship("Car", back_populates="parts")
@@ -120,17 +119,17 @@ class Admin(Base):
     __tablename__ = "admins"
     
     id = Column(Integer, primary_key=True, index=True)
-    telegram_id = Column(BigInteger, unique=True, nullable=False)  # изменён тип
-    added_by = Column(BigInteger, nullable=True)  # изменён тип (может быть ID админа)
+    telegram_id = Column(BigInteger, unique=True, nullable=False)
+    added_by = Column(BigInteger, nullable=True)
     added_at = Column(DateTime, default=datetime.utcnow)
 
 class BannedUser(Base):
     __tablename__ = "banned_users"
     
     id = Column(Integer, primary_key=True, index=True)
-    telegram_id = Column(BigInteger, unique=True, nullable=False)  # изменён тип
+    telegram_id = Column(BigInteger, unique=True, nullable=False)
     reason = Column(String, nullable=True)
-    banned_by = Column(BigInteger, nullable=True)  # изменён тип
+    banned_by = Column(BigInteger, nullable=True)
     banned_at = Column(DateTime, default=datetime.utcnow)
 
 def init_db():
