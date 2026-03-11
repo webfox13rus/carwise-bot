@@ -1,316 +1,199 @@
 import logging
-from datetime import datetime
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from sqlalchemy import func
+from datetime import datetime, timedelta
 
-from database import get_db, Car, MaintenanceEvent, User, Part
-from keyboards.main_menu import get_main_menu, get_maintenance_submenu, get_cancel_keyboard
+from database import SessionLocal, Car, MaintenanceEvent, User, Part
+from keyboards.main_menu import get_maintenance_submenu, get_cancel_keyboard
 from config import config
 
 router = Router()
 logger = logging.getLogger(__name__)
 
-class AddMaintenance(StatesGroup):
+class MaintenanceStates(StatesGroup):
     waiting_for_car = State()
     waiting_for_category = State()
     waiting_for_description = State()
     waiting_for_cost = State()
     waiting_for_mileage = State()
+    waiting_for_part_name = State()
     waiting_for_part_interval_mileage = State()
     waiting_for_part_interval_months = State()
     waiting_for_photo = State()
 
-def make_car_keyboard(cars):
-    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[])
-    for car in cars:
-        keyboard.inline_keyboard.append([
-            types.InlineKeyboardButton(
-                text=f"{car.brand} {car.model} - {car.current_mileage:,.0f} км",
-                callback_data=f"maint_car_{car.id}"
-            )
-        ])
-    return keyboard
-
-def get_category_keyboard():
-    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[])
-    for code, name in config.MAINTENANCE_CATEGORIES.items():
-        keyboard.inline_keyboard.append([
-            types.InlineKeyboardButton(text=name, callback_data=f"maint_cat_{code}")
-        ])
-    return keyboard
-
 @router.message(F.text == "🔧 Добавить событие")
-@router.message(Command("add_maintenance"))
 async def add_maintenance_start(message: types.Message, state: FSMContext):
-    with next(get_db()) as db:
+    with SessionLocal() as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
-            await message.answer("Сначала добавьте автомобиль через /add_car")
+            await message.answer("Сначала зарегистрируйтесь, отправив /start")
             return
         cars = db.query(Car).filter(Car.user_id == user.id, Car.is_active == True).all()
         if not cars:
-            await message.answer("У вас нет автомобилей. Сначала добавьте через /add_car")
+            await message.answer("У вас нет автомобилей. Сначала добавьте авто.", reply_markup=get_maintenance_submenu())
             return
+        # Сохраняем список авто в состоянии
+        await state.update_data(cars=[(car.id, f"{car.brand} {car.model} {car.year}") for car in cars])
+        await state.set_state(MaintenanceStates.waiting_for_car)
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text=name, callback_data=f"car_{car_id}")] for car_id, name in cars
+        ])
+        await message.answer("Выберите автомобиль:", reply_markup=keyboard)
 
-        if len(cars) == 1:
-            await state.update_data(car_id=cars[0].id)
-            await state.set_state(AddMaintenance.waiting_for_category)
-            await message.answer(
-                f"🔧 {cars[0].brand} {cars[0].model}\n"
-                f"Текущий пробег: {cars[0].current_mileage:,.0f} км\n\n"
-                "Выберите категорию обслуживания:",
-                reply_markup=get_category_keyboard()
-            )
-        else:
-            await state.set_state(AddMaintenance.waiting_for_car)
-            await message.answer(
-                "Выберите автомобиль:",
-                reply_markup=make_car_keyboard(cars)
-            )
-
-@router.callback_query(F.data.startswith("maint_car_"))
-async def process_car_choice(callback: types.CallbackQuery, state: FSMContext):
-    car_id = int(callback.data.split("_")[-1])
+@router.callback_query(MaintenanceStates.waiting_for_car, F.data.startswith("car_"))
+async def car_selected(callback: types.CallbackQuery, state: FSMContext):
+    car_id = int(callback.data.split("_")[1])
     await state.update_data(car_id=car_id)
-    await state.set_state(AddMaintenance.waiting_for_category)
-    with next(get_db()) as db:
-        car = db.query(Car).filter(Car.id == car_id).first()
-        await callback.message.edit_text(
-            f"🔧 {car.brand} {car.model}\n"
-            f"Текущий пробег: {car.current_mileage:,.0f} км\n\n"
-            "Выберите категорию обслуживания:",
-            reply_markup=get_category_keyboard()
-        )
+    await state.set_state(MaintenanceStates.waiting_for_category)
+    await callback.message.edit_text(
+        "Выберите категорию обслуживания:",
+        reply_markup=get_maintenance_categories_keyboard()
+    )
     await callback.answer()
 
-@router.callback_query(AddMaintenance.waiting_for_category, F.data.startswith("maint_cat_"))
-async def process_category(callback: types.CallbackQuery, state: FSMContext):
-    category = callback.data.split("_")[-1]
-    await state.update_data(category=category)
-    
-    if category == "to":
-        # Для ТО описание фиксированное
-        await state.update_data(description="Плановое ТО")
-        await state.set_state(AddMaintenance.waiting_for_cost)
-        await callback.message.edit_text(
-            f"Категория: {config.MAINTENANCE_CATEGORIES.get(category, category)}\n"
-            "Описание: Плановое ТО (автоматически)\n\n"
-            "Введите стоимость в рублях:"
-        )
-        await callback.message.answer(
-            "Введите стоимость:",
-            reply_markup=get_cancel_keyboard()
-        )
-    
+def get_maintenance_categories_keyboard():
+    from config import config
+    buttons = []
+    for key, value in config.MAINTENANCE_CATEGORIES.items():
+        buttons.append([types.InlineKeyboardButton(text=value, callback_data=f"cat_{key}")])
+    return types.InlineKeyboardMarkup(inline_keyboard=buttons)
+
+@router.callback_query(MaintenanceStates.waiting_for_category, F.data.startswith("cat_"))
+async def category_chosen(callback: types.CallbackQuery, state: FSMContext):
+    category_key = callback.data.split("_", 1)[1]
+    from config import config
+    category = config.MAINTENANCE_CATEGORIES.get(category_key, category_key)
+    await state.update_data(category=category, category_key=category_key)
+
+    if category_key == "parts":
+        await state.set_state(MaintenanceStates.waiting_for_part_name)
+        await callback.message.edit_text("Введите название детали (например, 'Тормозные колодки'):")
     else:
-        # Для остальных категорий запрашиваем описание с примером, зависящим от категории
-        await state.set_state(AddMaintenance.waiting_for_description)
-        
-        # Выбираем пример в зависимости от категории
-        if category == "parts":
-            example = "например: тормозные колодки, свечи зажигания"
-        elif category == "fluids":
-            example = "например: масло моторное, антифриз"
-        elif category == "tires":
-            example = "например: шиномонтаж, балансировка"
-        elif category == "wash":
-            example = "например: мойка кузова, химчистка"
-        elif category == "repair":
-            example = "например: ремонт подвески, диагностика"
-        else:
-            example = "например: замена масла, шиномонтаж"  # для других категорий (другое)
-        
-        await callback.message.edit_text(
-            f"Категория: {config.MAINTENANCE_CATEGORIES.get(category, category)}\n\n"
-            f"Введите, что сделали ({example}):"
-        )
-        await callback.message.answer(
-            "Для отмены нажмите кнопку ниже:",
-            reply_markup=get_cancel_keyboard()
-        )
-    
+        await state.set_state(MaintenanceStates.waiting_for_description)
+        await callback.message.edit_text("Введите описание события (можно кратко):")
     await callback.answer()
 
-@router.message(AddMaintenance.waiting_for_description)
-async def process_description(message: types.Message, state: FSMContext):
-    if message.text == "❌ Отмена":
-        await state.clear()
-        await message.answer("❌ Добавление отменено", reply_markup=get_maintenance_submenu())
-        return
-    await state.update_data(description=message.text)
-    await state.set_state(AddMaintenance.waiting_for_cost)
+@router.message(MaintenanceStates.waiting_for_part_name)
+async def part_name_entered(message: types.Message, state: FSMContext):
+    part_name = message.text.strip()
+    await state.update_data(part_name=part_name)
+    await state.set_state(MaintenanceStates.waiting_for_part_interval_mileage)
     await message.answer(
-        "Введите стоимость в рублях:",
+        "Введите интервал замены по пробегу (в км) или отправьте /skip, если не нужен:",
         reply_markup=get_cancel_keyboard()
     )
 
-@router.message(AddMaintenance.waiting_for_cost)
-async def process_cost(message: types.Message, state: FSMContext):
-    if message.text == "❌ Отмена":
-        await state.clear()
-        await message.answer("❌ Добавление отменено", reply_markup=get_maintenance_submenu())
-        return
+@router.message(MaintenanceStates.waiting_for_part_interval_mileage)
+async def part_interval_mileage_entered(message: types.Message, state: FSMContext):
+    if message.text != "/skip":
+        try:
+            interval_mileage = float(message.text.strip().replace(",", ""))
+            if interval_mileage <= 0:
+                raise ValueError
+        except ValueError:
+            await message.answer("❌ Введите положительное число (км).")
+            return
+        await state.update_data(part_interval_mileage=interval_mileage)
+    await state.set_state(MaintenanceStates.waiting_for_part_interval_months)
+    await message.answer(
+        "Введите интервал замены по времени (в месяцах) или отправьте /skip, если не нужен:"
+    )
+
+@router.message(MaintenanceStates.waiting_for_part_interval_months)
+async def part_interval_months_entered(message: types.Message, state: FSMContext):
+    if message.text != "/skip":
+        try:
+            interval_months = int(message.text.strip())
+            if interval_months <= 0:
+                raise ValueError
+        except ValueError:
+            await message.answer("❌ Введите целое положительное число (месяцы).")
+            return
+        await state.update_data(part_interval_months=interval_months)
+    # Переходим к описанию (для детали описание может быть автоматическим)
+    await state.update_data(description=f"Замена {message.text}")  # упростим
+    await state.set_state(MaintenanceStates.waiting_for_cost)
+    await message.answer("Введите стоимость (в рублях):")
+
+@router.message(MaintenanceStates.waiting_for_description)
+async def description_entered(message: types.Message, state: FSMContext):
+    await state.update_data(description=message.text.strip())
+    await state.set_state(MaintenanceStates.waiting_for_cost)
+    await message.answer("Введите стоимость (в рублях):", reply_markup=get_cancel_keyboard())
+
+@router.message(MaintenanceStates.waiting_for_cost)
+async def cost_entered(message: types.Message, state: FSMContext):
     try:
-        cost = float(message.text.replace(',', '.'))
-        await state.update_data(cost=cost)
-        await state.set_state(AddMaintenance.waiting_for_mileage)
-        await message.answer(
-            "Введите пробег на момент обслуживания (в км):",
-            reply_markup=get_cancel_keyboard()
-        )
+        cost = float(message.text.strip().replace(",", ""))
+        if cost <= 0:
+            raise ValueError
     except ValueError:
-        await message.answer("❌ Введите число (например, 2500)")
-
-@router.message(AddMaintenance.waiting_for_mileage)
-async def process_mileage(message: types.Message, state: FSMContext):
-    if message.text == "❌ Отмена":
-        await state.clear()
-        await message.answer("❌ Добавление отменено", reply_markup=get_maintenance_submenu())
+        await message.answer("❌ Введите корректную стоимость (число больше 0).")
         return
-    try:
-        mileage = float(message.text.replace(',', '.'))
-        data = await state.get_data()
-        car_id = data['car_id']
-        category = data['category']
-        description = data['description']
-        cost = data['cost']
+    await state.update_data(cost=cost)
+    await state.set_state(MaintenanceStates.waiting_for_mileage)
+    await message.answer(
+        "Введите пробег (в км) или отправьте /skip, чтобы пропустить:",
+        reply_markup=get_cancel_keyboard()
+    )
 
-        with next(get_db()) as db:
-            car = db.query(Car).filter(Car.id == car_id).first()
-            if car and mileage > car.current_mileage:
-                car.current_mileage = mileage
+@router.message(MaintenanceStates.waiting_for_mileage)
+async def mileage_entered(message: types.Message, state: FSMContext):
+    if message.text != "/skip":
+        try:
+            mileage = float(message.text.strip().replace(",", ""))
+            if mileage < 0:
+                raise ValueError
+        except ValueError:
+            await message.answer("❌ Введите корректный пробег (число).")
+            return
+        await state.update_data(mileage=mileage)
+    # Предложение добавить фото
+    await state.set_state(MaintenanceStates.waiting_for_photo)
+    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+        [types.InlineKeyboardButton(text="✅ Да, добавить фото", callback_data="photo_yes")],
+        [types.InlineKeyboardButton(text="❌ Нет, сохранить без фото", callback_data="photo_no")]
+    ])
+    await message.answer("Хотите прикрепить фото чека?", reply_markup=keyboard)
 
-            if category == "to":
-                car.last_maintenance_mileage = mileage
+@router.callback_query(MaintenanceStates.waiting_for_photo, F.data.in_({"photo_yes", "photo_no"}))
+async def photo_decision(callback: types.CallbackQuery, state: FSMContext):
+    if callback.data == "photo_yes":
+        await state.set_state(MaintenanceStates.waiting_for_photo)
+        await callback.message.edit_text("Отправьте фото чека.")
+    else:
+        await save_maintenance_event(callback.message, state, photo_id=None)
+    await callback.answer()
+
+@router.message(MaintenanceStates.waiting_for_photo, F.photo)
+async def photo_received(message: types.Message, state: FSMContext):
+    photo_id = message.photo[-1].file_id
+    await save_maintenance_event(message, state, photo_id)
+
+async def save_maintenance_event(message: types.Message, state: FSMContext, photo_id=None):
+    data = await state.get_data()
+    car_id = data.get("car_id")
+    category = data.get("category")
+    category_key = data.get("category_key")
+    description = data.get("description", "")
+    cost = data.get("cost")
+    mileage = data.get("mileage")
+
+    with SessionLocal() as db:
+        car = db.query(Car).filter(Car.id == car_id).first()
+        if car and mileage:
+            car.current_mileage = mileage
+            # Обновляем дату последнего ТО, если категория ТО
+            if category_key == "to":
                 car.last_maintenance_date = datetime.utcnow()
+                car.last_maintenance_mileage = mileage
+                # Сбрасываем флаги уведомлений
                 car.notified_to_mileage = False
                 car.notified_to_date = False
-                db.commit()
-            elif category == "parts" or category == "fluids":
-                await state.update_data(part_mileage=mileage, part_date=datetime.utcnow())
-                db.commit()
-                await state.set_state(AddMaintenance.waiting_for_part_interval_mileage)
-                await message.answer(
-                    "Укажите интервал замены этого элемента по пробегу (в км).\n"
-                    "Если интервал не нужен, отправьте 0:",
-                    reply_markup=get_cancel_keyboard()
-                )
-                return
-            else:
-                db.commit()
-
-        category_name = config.MAINTENANCE_CATEGORIES.get(category, category)
-        await message.answer(
-            f"✅ Обслуживание добавлено!\n\n"
-            f"Категория: {category_name}\n"
-            f"{description}\n"
-            f"Стоимость: {cost:.2f} ₽\n"
-            f"Пробег: {mileage:,.0f} км",
-            reply_markup=get_maintenance_submenu()
-        )
-        await state.clear()
-    except ValueError:
-        await message.answer("❌ Введите число (например, 150000)")
-
-@router.message(AddMaintenance.waiting_for_part_interval_mileage)
-async def process_part_interval_mileage(message: types.Message, state: FSMContext):
-    if message.text == "❌ Отмена":
-        await state.clear()
-        await message.answer("❌ Добавление отменено", reply_markup=get_maintenance_submenu())
-        return
-    try:
-        interval_mileage = float(message.text.replace(',', '.'))
-        if interval_mileage < 0:
-            await message.answer("❌ Интервал не может быть отрицательным. Введите число >=0:")
-            return
-        await state.update_data(part_interval_mileage=interval_mileage if interval_mileage > 0 else None)
-        await state.set_state(AddMaintenance.waiting_for_part_interval_months)
-        await message.answer(
-            "Укажите интервал замены по времени (в месяцах).\n"
-            "Если интервал не нужен, отправьте 0:",
-            reply_markup=get_cancel_keyboard()
-        )
-    except ValueError:
-        await message.answer("❌ Введите число (например, 10000)")
-
-@router.message(AddMaintenance.waiting_for_part_interval_months)
-async def process_part_interval_months(message: types.Message, state: FSMContext):
-    if message.text == "❌ Отмена":
-        await state.clear()
-        await message.answer("❌ Добавление отменено", reply_markup=get_maintenance_submenu())
-        return
-    try:
-        interval_months = int(message.text)
-        if interval_months < 0:
-            await message.answer("❌ Интервал не может быть отрицательным. Введите целое число >=0:")
-            return
-        data = await state.get_data()
-        car_id = data['car_id']
-        description = data['description']
-        part_mileage = data['part_mileage']
-        part_date = data['part_date']
-        interval_mileage = data.get('part_interval_mileage')
-        interval_months = interval_months if interval_months > 0 else None
-
-        with next(get_db()) as db:
-            part = db.query(Part).filter(
-                Part.car_id == car_id,
-                Part.name == description
-            ).first()
-            if part:
-                part.last_mileage = part_mileage
-                part.last_date = part_date
-                part.interval_mileage = interval_mileage
-                part.interval_months = interval_months
-                part.notified = False
-            else:
-                part = Part(
-                    car_id=car_id,
-                    name=description,
-                    last_mileage=part_mileage,
-                    last_date=part_date,
-                    interval_mileage=interval_mileage,
-                    interval_months=interval_months,
-                    notified=False
-                )
-                db.add(part)
             db.commit()
 
-        await state.set_state(AddMaintenance.waiting_for_photo)
-        await message.answer(
-            "Теперь вы можете прикрепить фото чека (необязательно).",
-            reply_markup=types.ReplyKeyboardMarkup(
-                keyboard=[[types.KeyboardButton(text="⏭ Пропустить")]],
-                resize_keyboard=True
-            )
-        )
-    except ValueError:
-        await message.answer("❌ Введите целое число (например, 12)")
-
-@router.message(AddMaintenance.waiting_for_photo, F.photo)
-async def process_maintenance_photo(message: types.Message, state: FSMContext):
-    photo_id = message.photo[-1].file_id
-    await state.update_data(photo_id=photo_id)
-    await save_maintenance_event(message, state)
-
-@router.message(AddMaintenance.waiting_for_photo, F.text == "⏭ Пропустить")
-async def skip_maintenance_photo(message: types.Message, state: FSMContext):
-    await state.update_data(photo_id=None)
-    await save_maintenance_event(message, state)
-
-async def save_maintenance_event(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    car_id = data['car_id']
-    category = data['category']
-    description = data['description']
-    cost = data['cost']
-    mileage = data.get('mileage') or data.get('part_mileage')
-    photo_id = data.get('photo_id')
-
-    with next(get_db()) as db:
         maint_event = MaintenanceEvent(
             car_id=car_id,
             category=category,
@@ -321,14 +204,94 @@ async def save_maintenance_event(message: types.Message, state: FSMContext):
         )
         db.add(maint_event)
         db.commit()
+        logger.info(f"Событие обслуживания добавлено для авто {car_id}")
 
-    category_name = config.MAINTENANCE_CATEGORIES.get(category, category)
+        # Если это замена детали (parts), создаём запись в Part
+        if category_key == "parts":
+            part_name = data.get("part_name")
+            interval_mileage = data.get("part_interval_mileage")
+            interval_months = data.get("part_interval_months")
+            part = Part(
+                car_id=car_id,
+                name=part_name,
+                interval_mileage=interval_mileage,
+                interval_months=interval_months,
+                last_mileage=mileage,
+                last_date=datetime.utcnow(),
+                notified=False
+            )
+            db.add(part)
+            db.commit()
+            logger.info(f"Деталь {part_name} добавлена в Part")
+
     await message.answer(
-        f"✅ Обслуживание добавлено!\n\n"
-        f"Категория: {category_name}\n"
-        f"{description}\n"
-        f"Стоимость: {cost:.2f} ₽\n"
-        f"Пробег: {mileage:,.0f} км",
+        f"✅ Событие '{category}' сохранено!\n"
+        f"Стоимость: {cost:.2f} руб.\n"
+        f"Пробег: {mileage:,.0f} км" if mileage else "Пробег не указан",
         reply_markup=get_maintenance_submenu()
     )
     await state.clear()
+
+@router.message(F.text == "🔧 Плановые замены")
+async def planned_replacements(message: types.Message):
+    with SessionLocal() as db:
+        user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
+        if not user:
+            await message.answer("Сначала зарегистрируйтесь.")
+            return
+        cars = db.query(Car).filter(Car.user_id == user.id, Car.is_active == True).all()
+        if not cars:
+            await message.answer("У вас нет автомобилей.")
+            return
+        car_ids = [car.id for car in cars]
+        parts = db.query(Part).filter(Part.car_id.in_(car_ids)).all()
+        if not parts:
+            await message.answer("Нет данных о плановых заменах.", reply_markup=get_maintenance_submenu())
+            return
+        text = "🔧 *Плановые замены деталей*\n\n"
+        today = datetime.utcnow().date()
+        for part in parts:
+            car = part.car
+            if not car:
+                continue
+            text += f"• {car.brand} {car.model}:\n"
+            text += f"  Деталь: {part.name}\n"
+            if part.interval_mileage and part.last_mileage:
+                next_mileage = part.last_mileage + part.interval_mileage
+                remaining = next_mileage - car.current_mileage
+                text += f"  По пробегу: осталось {remaining:,.0f} км (до {next_mileage:,.0f} км)\n"
+            if part.interval_months and part.last_date:
+                next_date = part.last_date + timedelta(days=30 * part.interval_months)
+                days_left = (next_date.date() - today).days
+                text += f"  По времени: осталось {days_left} дн. (до {next_date.strftime('%d.%m.%Y')})\n"
+            text += "\n"
+        await message.answer(text, parse_mode="Markdown", reply_markup=get_maintenance_submenu())
+
+@router.message(F.text == "⏰ Напоминания ТО")
+async def to_reminders_settings(message: types.Message):
+    # Здесь должна быть логика настройки напоминаний ТО
+    await message.answer("Функция настройки напоминаний ТО в разработке.", reply_markup=get_maintenance_submenu())
+
+@router.message(F.text == "📸 Мои чеки обслуживания")
+async def my_maintenance_photos(message: types.Message):
+    with SessionLocal() as db:
+        user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
+        if not user:
+            await message.answer("Сначала зарегистрируйтесь.")
+            return
+        cars = db.query(Car).filter(Car.user_id == user.id, Car.is_active == True).all()
+        if not cars:
+            await message.answer("У вас нет автомобилей.")
+            return
+        car_ids = [car.id for car in cars]
+        events = db.query(MaintenanceEvent).filter(
+            MaintenanceEvent.car_id.in_(car_ids),
+            MaintenanceEvent.photo_id != None
+        ).order_by(MaintenanceEvent.date.desc()).limit(10).all()
+        if not events:
+            await message.answer("У вас нет сохранённых чеков обслуживания.", reply_markup=get_maintenance_submenu())
+            return
+        for event in events:
+            caption = f"{event.category} от {event.date.strftime('%d.%m.%Y')}\n{event.description}\nСтоимость: {event.cost:.2f} руб."
+            await message.answer_photo(photo=event.photo_id, caption=caption)
+        await message.answer("Это последние 10 чеков.", reply_markup=get_maintenance_submenu())
