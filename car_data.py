@@ -1,60 +1,44 @@
-# car_data.py
-
-# Все марки (старые + новые китайские)
-CAR_BRANDS = [
-    # Европейские/японские/корейские (были ранее)
-    "Toyota", "BMW", "Mercedes-Benz", "Audi", "Volkswagen",
-    "Lada", "Kia", "Hyundai", "Renault", "Nissan",
-    "Ford", "Chevrolet", "Mazda", "Skoda", "Mitsubishi",
-    # Китайские бренды (новые)
-    "Chery", "Geely", "Haval", "Changan", "Exeed",
-    "OMODA", "Jaecoo", "Great Wall", "Tank", "GAC",
-    "FAW", "BAIC", "Dongfeng", "Jetour", "Livan",
-    "Voyah", "SWM", "Kaiyi", "Ora", "Wey"
+# Список популярных марок автомобилей (можно расширить)
+BRANDS = [
+    "Lada", "Toyota", "Kia", "Hyundai", "Renault", "Volkswagen", "Skoda", "Ford",
+    "Nissan", "BMW", "Mercedes-Benz", "Audi", "Mazda", "Mitsubishi", "Subaru",
+    "Honda", "Suzuki", "Opel", "Peugeot", "Citroen", "Fiat", "Volvo", "Land Rover",
+    "Jeep", "Chery", "Geely", "Haval", "Exeed", "Changan", "Great Wall", "BYD",
+    "Lifan", "Zotye", "Datsun", "Ravon", "Chevrolet", "Daihatsu", "Alfa Romeo",
+    "Porsche", "Jaguar", "Lexus", "Infiniti", "Acura", "Cadillac", "Chrysler",
+    "Dodge", "Mini", "Smart", "Tesla", "Genesis", "Reno", "Москвич", "ГАЗ", "УАЗ"
 ]
 
-# Модели по маркам
-CAR_MODELS = {
-    # Существующие модели (оставляем без изменений)
-    "Toyota": ["Camry", "Corolla", "RAV4", "Land Cruiser", "Yaris"],
-    "BMW": ["X5", "X3", "3 Series", "5 Series", "M5"],
-    "Mercedes-Benz": ["E-Class", "S-Class", "GLC", "GLE", "A-Class"],
-    "Audi": ["A4", "A6", "Q5", "Q7", "TT"],
-    "Volkswagen": ["Golf", "Passat", "Tiguan", "Polo", "Jetta"],
-    "Lada": ["Vesta", "Granta", "Niva", "Largus", "XRAY"],
-    "Kia": ["Rio", "Sportage", "Sorento", "Ceed", "Optima"],
-    "Hyundai": ["Solaris", "Creta", "Tucson", "Elantra", "Santa Fe"],
-    "Renault": ["Logan", "Duster", "Sandero", "Kaptur", "Arkana"],
-    "Nissan": ["Qashqai", "X-Trail", "Juke", "Almera", "Terrano"],
-    "Ford": ["Focus", "Mondeo", "Kuga", "EcoSport", "Fiesta"],
-    "Chevrolet": ["Cruze", "Lacetti", "Niva", "Aveo", "Spark"],
-    "Mazda": ["CX-5", "CX-9", "Mazda3", "Mazda6", "MX-5"],
-    "Skoda": ["Octavia", "Rapid", "Kodiaq", "Karoq", "Superb"],
+# Словарь моделей для каждой марки (пример, можно дополнить)
+MODELS_BY_BRAND = {
+    "Lada": ["Granta", "Vesta", "XRAY", "Largus", "Niva", "4x4", "Kalina", "Priora"],
+    "Toyota": ["Camry", "Corolla", "RAV4", "Land Cruiser", "Prado", "Highlander", "C-HR", "Yaris"],
+    "Kia": ["Rio", "Sportage", "Sorento", "Optima", "Ceed", "Picanto", "Stinger", "K5"],
+    "Hyundai": ["Solaris", "Creta", "Tucson", "Elantra", "Santa Fe", "Palisade", "Sonata", "ix35"],
+    "Renault": ["Logan", "Sandero", "Duster", "Kaptur", "Arkana", "Koleos", "Megan"],
+    "Volkswagen": ["Polo", "Jetta", "Tiguan", "Passat", "Golf", "Tuareg", "Teramont"],
+    "Skoda": ["Rapid", "Octavia", "Kodiaq", "Karoq", "Superb", "Fabia"],
+    "Ford": ["Focus", "Mondeo", "Kuga", "EcoSport", "Explorer", "Fusion", "Mustang"],
+    "Nissan": ["Qashqai", "X-Trail", "Terrano", "Juke", "Murano", "Patrol", "Almera"],
+    "BMW": ["3 series", "5 series", "X3", "X5", "X1", "X6", "1 series", "7 series"],
+    "Mercedes-Benz": ["E-Class", "C-Class", "S-Class", "GLE", "GLC", "GLA", "GLB", "G-Class"],
+    "Audi": ["A3", "A4", "A6", "Q3", "Q5", "Q7", "TT"],
+    "Mazda": ["3", "6", "CX-5", "CX-9", "MX-5", "CX-30"],
     "Mitsubishi": ["Outlander", "Pajero", "L200", "ASX", "Lancer"],
-    
-    # Китайские модели
-    "Chery": ["Tiggo 4", "Tiggo 7", "Tiggo 8", "Tiggo 8 Pro", "Arrizo 8"],
-    "Geely": ["Coolray", "Atlas", "Monjaro", "Emgrand", "Tugella"],
-    "Haval": ["Jolion", "F7", "F7x", "Dargo", "H9"],
-    "Changan": ["CS35", "CS55", "CS75", "Uni-K", "Uni-T", "Alsvin"],
-    "Exeed": ["LX", "TXL", "VX", "RX"],
-    "OMODA": ["C5"],
-    "Jaecoo": ["J7"],
-    "Great Wall": ["Wingle 7", "Poer"],
-    "Tank": ["300", "500", "700"],
-    "GAC": ["GS3", "GS8", "GN8"],
-    "FAW": ["Bestune T77", "Bestune T99"],
-    "BAIC": ["X35", "X55", "U5 Plus"],
-    "Dongfeng": ["580", "580 Pro", "Aeolus"],
-    "Jetour": ["X70", "X90", "Dashing"],
-    "Livan": ["X3 Pro"],
-    "Voyah": ["Free", "Dream"],
-    "SWM": ["G01", "G05"],
-    "Kaiyi": ["X3", "X7"],
-    "Ora": ["03 (Good Cat)"],
-    "Wey": ["Coffee 01", "Coffee 02"]
+    "Subaru": ["Forester", "Outback", "Impreza", "XV", "Legacy"],
+    "Honda": ["CR-V", "Civic", "Accord", "Pilot", "HR-V"],
+    "Chery": ["Tiggo 4", "Tiggo 7", "Tiggo 8", "Arrizo 5", "Arrizo 8"],
+    "Geely": ["Coolray", "Atlas", "Tugella", "Emgrand", "Monjaro"],
+    "Haval": ["Jolion", "F7", "F7x", "H9", "Dargo"],
+    "Exeed": ["LX", "TXL", "VX"],
+    "Changan": ["CS35", "CS55", "CS75", "UNI-K", "Alsvin"],
+    "BYD": ["Song", "Tang", "Han", "Yuan", "Seal"],
+    "ГАЗ": ["3110", "31105", "3302", "2705", "Соболь"],
+    "УАЗ": ["Патриот", "Хантер", "Буханка", "Пикап"],
+    "Москвич": ["3", "6", "2141"],
+    "Tesla": ["Model 3", "Model Y", "Model S", "Model X", "Cybertruck"],
 }
 
-def get_models_for_brand(brand: str) -> list:
-    """Возвращает список моделей для марки или пустой список, если марка не найдена"""
-    return CAR_MODELS.get(brand, [])
+# Для удобства можно добавить функцию получения моделей с обработкой отсутствия
+def get_models(brand):
+    return MODELS_BY_BRAND.get(brand, [])
