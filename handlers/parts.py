@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from aiogram import Router, types, F
 from aiogram.filters import Command
 
-from database import get_db, Car, Part, User
+rom database import SessionLocal, Car, Part, User
 from keyboards.main_menu import get_main_menu, get_maintenance_submenu
 
 router = Router()
