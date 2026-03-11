@@ -20,3 +20,8 @@ async def cmd_start(message: types.Message):
         parse_mode="Markdown",
         reply_markup=get_main_menu()
     )
+
+@router.message(Command("help"))
+async def cmd_help(message: types.Message):
+    # Здесь можно разместить ваш длинный текст помощи
+    await message.answer("Раздел помощи в разработке.", reply_markup=get_main_menu())
