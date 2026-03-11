@@ -5,7 +5,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from database import get_db, Car, User
+rom database import SessionLocal, Car, User
 from keyboards.main_menu import get_main_menu, get_maintenance_submenu, get_cancel_keyboard
 
 router = Router()
