@@ -4,7 +4,7 @@ from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-rom database import SessionLocal, Car, User, FuelEvent, MaintenanceEvent, Insurance
+from database import SessionLocal, Car, User, FuelEvent, MaintenanceEvent, Insurance
 from keyboards.main_menu import (
     get_main_menu, get_fuel_submenu, get_maintenance_submenu,
     get_insurance_submenu, get_more_submenu, get_cancel_keyboard
