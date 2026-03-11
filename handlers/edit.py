@@ -6,7 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy import func
 
-from database import get_db, Car, User, FuelEvent, MaintenanceEvent, Insurance
+rom database import SessionLocal, Car, User, FuelEvent, MaintenanceEvent, Insurance
 from keyboards.main_menu import get_main_menu, get_cancel_keyboard, get_fuel_types_keyboard
 from config import config
 
