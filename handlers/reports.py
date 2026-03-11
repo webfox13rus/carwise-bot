@@ -2,7 +2,7 @@ from aiogram import Router, types, F
 from aiogram.filters import Command
 from sqlalchemy import func
 from datetime import datetime, timedelta
-from database import get_db, Car, FuelEvent, MaintenanceEvent, User, Insurance, Part
+rom database import SessionLocal, Car, FuelEvent, MaintenanceEvent, User, Insurance, Part
 from keyboards.main_menu import get_stats_submenu
 from config import config
 
@@ -286,3 +286,4 @@ async def show_detailed_stats(message: types.Message):
 
         full_response = "\n".join(response_lines)
         await message.answer(full_response, parse_mode="Markdown", reply_markup=get_stats_submenu())
+
