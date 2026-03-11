@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from config import config
 from database import SessionLocal, init_db, Insurance, Car, User, Part, Admin, BannedUser
 
-# Импорты всех роутеров (обязательно проверьте, что все эти файлы существуют в папке handlers)
+# Импорты всех роутеров
 from handlers.start import router as start_router
 from handlers.cars import router as cars_router
 from handlers.fuel import router as fuel_router
@@ -40,19 +40,28 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Функция проверки бана
+# ------------------- Вспомогательная функция -------------------
 async def is_user_banned(user_id: int) -> bool:
     with SessionLocal() as db:
         banned = db.query(BannedUser).filter(BannedUser.telegram_id == user_id).first()
         return banned is not None
 
-# Функции планировщика (сокращены, оставьте свои реализации)
+# ------------------- Функции планировщика -------------------
 async def check_insurances(bot: Bot):
     logger.info("🔍 Проверка сроков страховок...")
     try:
         with SessionLocal() as db:
             today = datetime.utcnow().date()
-            # ваш код...
+            # Страховки, истекающие в ближайшие 7 дней
+            insurances = db.query(Insurance).options(
+                selectinload(Insurance.car).selectinload(Car.owner)
+            ).filter(
+                and_(
+                    Insurance.end_date <= today + timedelta(days=7),
+                    Insurance.end_date > today
+                )
+            ).all()
+            # ... логика отправки уведомлений (сокращена для краткости)
     except Exception as e:
         logger.exception(f"Ошибка в check_insurances: {e}")
 
@@ -61,7 +70,7 @@ async def check_maintenance_reminders(bot: Bot):
     try:
         with SessionLocal() as db:
             today = datetime.utcnow().date()
-            # ваш код...
+            # ... логика
     except Exception as e:
         logger.exception(f"Ошибка в check_maintenance_reminders: {e}")
 
@@ -70,21 +79,22 @@ async def check_parts_reminders(bot: Bot):
     try:
         with SessionLocal() as db:
             today = datetime.utcnow().date()
-            # ваш код...
+            # ... логика
     except Exception as e:
         logger.exception(f"Ошибка в check_parts_reminders: {e}")
 
 async def send_monthly_reports(bot: Bot):
-    logger.info("📅 Проверка ежемесячных отчётов...")
+    logger.info("📅 Ежемесячные отчёты...")
     try:
-        # ваш код...
+        # ... логика
     except Exception as e:
         logger.exception(f"Ошибка в send_monthly_reports: {e}")
 
+# ------------------- Точка входа -------------------
 async def main():
     BOT_TOKEN = os.getenv("BOT_TOKEN")
     if not BOT_TOKEN:
-        logger.error("❌ BOT_TOKEN не найден в переменных окружения!")
+        logger.error("❌ BOT_TOKEN не найден!")
         return
 
     try:
@@ -115,7 +125,7 @@ async def main():
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
 
-    # Подключаем все роутеры
+    # Подключаем роутеры
     dp.include_router(navigation_router)
     dp.include_router(start_router)
     dp.include_router(cars_router)
@@ -135,7 +145,10 @@ async def main():
     dp.include_router(payment_router)
     dp.include_router(admin_router)
 
-    # Планировщик
+    # Удаляем вебхук (если был установлен ранее)
+    await bot.delete_webhook(drop_pending_updates=True)
+    
+    # Настройка планировщика (работает, так как сервер не спит)
     scheduler = AsyncIOScheduler()
     scheduler.add_job(check_insurances, 'cron', hour=10, minute=0, args=(bot,))
     scheduler.add_job(check_maintenance_reminders, 'cron', hour=9, minute=0, args=(bot,))
@@ -144,11 +157,9 @@ async def main():
     scheduler.start()
     logger.info("⏰ Планировщик напоминаний запущен")
 
-    # Удаляем вебхук перед запуском polling (для локального теста)
-    await bot.delete_webhook(drop_pending_updates=True)
+    logger.info("🚀 CarWise Bot запущен на Railway!")
     
-    # Запуск polling
-    logger.info("🚀 Бот запускается в режиме polling...")
+    # Запуск polling (для Railway это нормально)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
