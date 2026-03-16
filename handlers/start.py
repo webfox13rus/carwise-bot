@@ -2,7 +2,9 @@ from aiogram import Router, types
 from aiogram.filters import Command
 from keyboards.main_menu import get_main_menu
 from database import SessionLocal, User
+import logging
 
+logger = logging.getLogger(__name__)
 router = Router()
 
 @router.message(Command("start"))
