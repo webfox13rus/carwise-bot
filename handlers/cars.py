@@ -4,6 +4,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from datetime import datetime
+from config import config
 
 from database import SessionLocal, Car, User
 from keyboards.main_menu import get_cars_submenu, get_cancel_keyboard
