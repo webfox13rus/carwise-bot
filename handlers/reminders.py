@@ -30,7 +30,7 @@ def make_car_keyboard(cars):
 @router.message(F.text == "⏰ Напоминания ТО")
 @router.message(Command("set_to_reminder"))
 async def set_reminder_start(message: types.Message, state: FSMContext):
-    with next(get_db()) as db:
+    with SessionLocal() as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
             await message.answer("Сначала добавьте автомобиль через /add_car")
@@ -61,7 +61,7 @@ async def process_car_choice(callback: types.CallbackQuery, state: FSMContext):
     car_id = int(callback.data.split("_")[-1])
     await state.update_data(car_id=car_id)
     await state.set_state(SetReminder.waiting_for_mileage_interval)
-    with next(get_db()) as db:
+    with SessionLocal() as db:
         car = db.query(Car).filter(Car.id == car_id).first()
         if car:
             await callback.message.edit_text(
@@ -110,7 +110,7 @@ async def process_months_interval(message: types.Message, state: FSMContext):
         car_id = data['car_id']
         mileage_int = data['mileage_int']
 
-        with next(get_db()) as db:
+        with SessionLocal() as db:
             car = db.query(Car).filter(Car.id == car_id).first()
             if car:
                 car.to_mileage_interval = mileage_int if mileage_int > 0 else None
@@ -140,7 +140,7 @@ async def process_months_interval(message: types.Message, state: FSMContext):
 
 @router.message(Command("show_reminders"))
 async def show_reminders(message: types.Message):
-    with next(get_db()) as db:
+    with SessionLocal() as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
             await message.answer("Сначала зарегистрируйтесь")
