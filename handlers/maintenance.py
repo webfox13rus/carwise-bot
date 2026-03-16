@@ -113,7 +113,7 @@ async def part_interval_months_entered(message: types.Message, state: FSMContext
             return
         await state.update_data(part_interval_months=interval_months)
     # Переходим к описанию (для детали описание может быть автоматическим)
-    await state.update_data(description=f"Замена {message.text}")  # упростим
+    await state.update_data(description=f"Замена {part_name}")  # упростим
     await state.set_state(MaintenanceStates.waiting_for_cost)
     await message.answer("Введите стоимость (в рублях):")
 
