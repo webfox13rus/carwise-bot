@@ -98,7 +98,7 @@ async def edit_main_menu(message: types.Message):
 # ------------------- Редактирование заправок -------------------
 @router.message(F.text == "⛽ Заправка")
 async def edit_fuel_start(message: types.Message, state: FSMContext):
-    with next(get_db()) as db:
+    with SessionLocal() as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
             await message.answer("Сначала зарегистрируйтесь, отправив /start")
@@ -118,7 +118,7 @@ async def edit_fuel_start(message: types.Message, state: FSMContext):
             )
 
 async def show_fuel_events(message: types.Message, state: FSMContext, car_id: int):
-    with next(get_db()) as db:
+    with SessionLocal() as db:
         events = db.query(FuelEvent).filter(FuelEvent.car_id == car_id).order_by(FuelEvent.date.desc()).limit(10).all()
         if not events:
             await message.answer("Нет заправок для этого авто.")
@@ -238,7 +238,7 @@ async def save_edited_fuel(message: types.Message, state: FSMContext):
     new_fuel_type = data.get('fuel_type')
     new_photo = data.get('photo_id')
 
-    with next(get_db()) as db:
+    with SessionLocal() as db:
         event = db.query(FuelEvent).filter(FuelEvent.id == event_id).first()
         if not event:
             await message.answer("❌ Запись не найдена")
@@ -262,7 +262,7 @@ async def save_edited_fuel(message: types.Message, state: FSMContext):
 # ------------------- Редактирование обслуживания -------------------
 @router.message(F.text == "🔧 Обслуживание")
 async def edit_maint_start(message: types.Message, state: FSMContext):
-    with next(get_db()) as db:
+    with SessionLocal() as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
             await message.answer("Сначала зарегистрируйтесь, отправив /start")
@@ -282,7 +282,7 @@ async def edit_maint_start(message: types.Message, state: FSMContext):
             )
 
 async def show_maint_events(message: types.Message, state: FSMContext, car_id: int):
-    with next(get_db()) as db:
+    with SessionLocal() as db:
         events = db.query(MaintenanceEvent).filter(MaintenanceEvent.car_id == car_id).order_by(MaintenanceEvent.date.desc()).limit(10).all()
         if not events:
             await message.answer("Нет событий обслуживания для этого авто.")
@@ -398,7 +398,7 @@ async def save_edited_maint(message: types.Message, state: FSMContext):
     new_mileage = data.get('mileage')
     new_photo = data.get('photo_id')
 
-    with next(get_db()) as db:
+    with SessionLocal() as db:
         event = db.query(MaintenanceEvent).filter(MaintenanceEvent.id == event_id).first()
         if not event:
             await message.answer("❌ Запись не найдена")
@@ -422,7 +422,7 @@ async def save_edited_maint(message: types.Message, state: FSMContext):
 # ------------------- Редактирование страховок -------------------
 @router.message(F.text == "📄 Страховка")
 async def edit_ins_start(message: types.Message, state: FSMContext):
-    with next(get_db()) as db:
+    with SessionLocal() as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
             await message.answer("Сначала зарегистрируйтесь, отправив /start")
@@ -442,7 +442,7 @@ async def edit_ins_start(message: types.Message, state: FSMContext):
             )
 
 async def show_ins_events(message: types.Message, state: FSMContext, car_id: int):
-    with next(get_db()) as db:
+    with SessionLocal() as db:
         events = db.query(Insurance).filter(Insurance.car_id == car_id).order_by(Insurance.end_date.desc()).limit(10).all()
         if not events:
             await message.answer("Нет страховок для этого авто.")
@@ -579,7 +579,7 @@ async def save_edited_ins(message: types.Message, state: FSMContext):
     new_notes = data.get('notes')
     new_photo = data.get('photo_id')
 
-    with next(get_db()) as db:
+    with SessionLocal() as db:
         event = db.query(Insurance).filter(Insurance.id == event_id).first()
         if not event:
             await message.answer("❌ Запись не найдена")
