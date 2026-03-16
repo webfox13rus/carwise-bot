@@ -34,8 +34,8 @@ async def add_maintenance_start(message: types.Message, state: FSMContext):
         if not cars:
             await message.answer("У вас нет автомобилей. Сначала добавьте авто.", reply_markup=get_maintenance_submenu())
             return
-        # Сохраняем список авто в состоянии
-        await state.update_data(cars=[(car.id, f"{car.brand} {car.model} {car.year}") for car in cars])
+        # Сохраняем список авто как кортежи (id, название)
+        await state.update_data(cars=[(car.id, f"{car.brand} {car.model}") for car in cars])
         await state.set_state(MaintenanceStates.waiting_for_car)
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
             [types.InlineKeyboardButton(text=name, callback_data=f"car_{car_id}")] for car_id, name in cars
