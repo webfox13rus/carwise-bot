@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 @router.message(F.text == "🔧 Плановые замены")
 @router.message(Command("parts"))
 async def show_parts(message: types.Message):
-    with next(get_db()) as db:
+    with SessionLocal() as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
             await message.answer("Сначала зарегистрируйтесь", reply_markup=get_maintenance_submenu())
