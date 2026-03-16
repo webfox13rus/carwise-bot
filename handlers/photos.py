@@ -14,7 +14,6 @@ class PhotoStates(StatesGroup):
     waiting_for_category_selection = State()
 
 async def start_car_selection(message: types.Message, state: FSMContext, back_menu):
-    """Запускает выбор автомобиля для просмотра чеков."""
     with SessionLocal() as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
@@ -24,14 +23,14 @@ async def start_car_selection(message: types.Message, state: FSMContext, back_me
         if not cars:
             await message.answer("У вас нет автомобилей.", reply_markup=back_menu)
             return
-        # Сохраняем список авто в состоянии
+        # Сохраняем список авто как кортежи (id, название)
         await state.update_data(cars=[(car.id, f"{car.brand} {car.model}") for car in cars])
         await state.set_state(PhotoStates.waiting_for_car_selection)
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
             [types.InlineKeyboardButton(text=name, callback_data=f"car_{car_id}")] for car_id, name in cars
         ])
         await message.answer("Выберите автомобиль:", reply_markup=keyboard)
-
+        
 @router.message(F.text == "📸 Все чеки")
 async def view_all_photos(message: types.Message, state: FSMContext):
     await start_car_selection(message, state, get_more_submenu)
