@@ -15,7 +15,7 @@ router = Router()
 @router.message(F.text.in_(["📤 Экспорт данных (Premium)", "📤 Экспорт данных", "📤 Экспорт в CSV"]))
 @router.message(Command("export"))
 async def export_data(message: types.Message):
-    with next(get_db()) as db:
+    with SessionLocal() as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
             await message.answer("Сначала зарегистрируйтесь, отправив /start")
