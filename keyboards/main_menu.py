@@ -98,6 +98,12 @@ def get_cancel_keyboard():
         resize_keyboard=True
     )
 
+def get_skip_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="⏭ Пропустить")], [KeyboardButton(text="❌ Отмена")]],
+        resize_keyboard=True
+    )
+
 def get_fuel_types_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
