@@ -9,11 +9,9 @@ router = Router()
 
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
-    # Проверяем, есть ли пользователь в БД
     with SessionLocal() as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
-            # Создаём нового пользователя
             user = User(
                 telegram_id=message.from_user.id,
                 username=message.from_user.username,
@@ -42,5 +40,4 @@ async def cmd_start(message: types.Message):
 
 @router.message(Command("help"))
 async def cmd_help(message: types.Message):
-    # Здесь можно разместить ваш длинный текст помощи
     await message.answer("Раздел помощи в разработке.", reply_markup=get_main_menu())
