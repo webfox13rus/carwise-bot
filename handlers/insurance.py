@@ -34,7 +34,6 @@ async def add_insurance_start(message: types.Message, state: FSMContext):
         if not cars:
             await message.answer("У вас нет автомобилей.", reply_markup=get_insurance_submenu())
             return
-        # Создаём список кортежей (id, название) для клавиатуры и состояния
         cars_list = [(car.id, f"{car.brand} {car.model}") for car in cars]
         await state.update_data(cars=cars_list)
         await state.set_state(InsuranceStates.waiting_for_car)
