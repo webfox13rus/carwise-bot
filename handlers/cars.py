@@ -47,7 +47,6 @@ async def list_cars(message: types.Message):
 
 @router.message(F.text == "➕ Добавить авто")
 async def add_car_start(message: types.Message, state: FSMContext):
-    # Проверка лимита на количество авто для обычных пользователей
     with SessionLocal() as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
@@ -67,7 +66,7 @@ async def add_car_start(message: types.Message, state: FSMContext):
 
 def get_brands_keyboard():
     buttons = []
-    for brand in BRANDS[:10]:  # первые 10 марок
+    for brand in BRANDS[:10]:
         buttons.append([types.InlineKeyboardButton(text=brand, callback_data=f"brand_{brand}")])
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -229,7 +228,6 @@ async def update_mileage_start(message: types.Message, state: FSMContext):
         if not cars:
             await message.answer("У вас нет автомобилей.", reply_markup=get_cars_submenu())
             return
-        # Создаём список кортежей для состояния и клавиатуры
         cars_list = [(car.id, f"{car.brand} {car.model} {car.year}") for car in cars]
         await state.update_data(cars=cars_list)
         await state.set_state(CarStates.waiting_for_car_to_update_mileage)
@@ -279,7 +277,6 @@ async def delete_car_start(message: types.Message, state: FSMContext):
         if not cars:
             await message.answer("У вас нет автомобилей.", reply_markup=get_cars_submenu())
             return
-        # Создаём список кортежей для состояния и клавиатуры
         cars_list = [(car.id, f"{car.brand} {car.model} {car.year}") for car in cars]
         await state.update_data(cars=cars_list)
         await state.set_state(CarStates.waiting_for_car_to_delete)
