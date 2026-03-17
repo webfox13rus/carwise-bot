@@ -6,7 +6,7 @@ from aiogram.fsm.state import State, StatesGroup
 from datetime import datetime, timedelta
 
 from database import SessionLocal, Car, User, Insurance
-from keyboards.main_menu import get_insurance_submenu, get_cancel_keyboard
+from keyboards.main_menu import get_insurance_submenu, get_cancel_keyboard, get_skip_keyboard
 from config import config
 
 router = Router()
@@ -110,7 +110,7 @@ async def cost_entered(message: types.Message, state: FSMContext):
             raise ValueError
         await state.update_data(cost=cost)
         await state.set_state(InsuranceStates.waiting_for_notes)
-        await message.answer("Введите примечания (или отправьте /skip для пропуска):", reply_markup=get_cancel_keyboard())
+        await message.answer("Введите примечания или нажмите 'Пропустить':", reply_markup=get_skip_keyboard())
     except ValueError:
         await message.answer("❌ Введите корректную стоимость (число больше 0).")
 
@@ -120,7 +120,7 @@ async def notes_entered(message: types.Message, state: FSMContext):
         await state.clear()
         await message.answer("❌ Добавление отменено", reply_markup=get_insurance_submenu())
         return
-    notes = message.text if message.text != "/skip" else None
+    notes = message.text if message.text != "⏭ Пропустить" else None
     await state.update_data(notes=notes)
     await state.set_state(InsuranceStates.waiting_for_photo)
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
