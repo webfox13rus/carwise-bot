@@ -5,7 +5,7 @@ from aiogram.fsm.state import State, StatesGroup
 from datetime import datetime
 
 from database import SessionLocal, Car, FuelEvent, User
-from keyboards.main_menu import get_fuel_submenu, get_cancel_keyboard
+from keyboards.main_menu import get_fuel_submenu, get_cancel_keyboard, get_skip_keyboard
 from config import config
 
 router = Router()
@@ -97,8 +97,8 @@ async def cost_entered(message: types.Message, state: FSMContext):
     await state.update_data(cost=cost)
     await state.set_state(FuelStates.waiting_for_mileage)
     await message.answer(
-        "Введите пробег (в км) или отправьте /skip, чтобы пропустить:",
-        reply_markup=get_cancel_keyboard()
+        "Введите пробег (в км) или нажмите 'Пропустить', чтобы пропустить:",
+        reply_markup=get_skip_keyboard()
     )
 
 @router.message(FuelStates.waiting_for_mileage)
@@ -107,15 +107,15 @@ async def mileage_entered(message: types.Message, state: FSMContext):
         await state.clear()
         await message.answer("❌ Добавление заправки отменено", reply_markup=get_fuel_submenu())
         return
-    if message.text != "/skip":
+    if message.text != "⏭ Пропустить":
         try:
             mileage = float(message.text.strip().replace(",", ""))
             if mileage < 0:
                 raise ValueError
+            await state.update_data(mileage=mileage)
         except ValueError:
             await message.answer("❌ Введите корректный пробег (число).")
             return
-        await state.update_data(mileage=mileage)
     await state.set_state(FuelStates.waiting_for_photo)
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
         [types.InlineKeyboardButton(text="✅ Да, добавить фото", callback_data="photo_yes")],
