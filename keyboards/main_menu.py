@@ -10,7 +10,7 @@ def is_admin(user_id: int) -> bool:
         return admin is not None
 
 def get_main_menu():
-    keyboard = ReplyKeyboardMarkup(
+    return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🚗 Мои авто")],
             [KeyboardButton(text="⛽ Заправки")],
@@ -21,7 +21,6 @@ def get_main_menu():
         ],
         resize_keyboard=True
     )
-    return keyboard
 
 def get_cars_submenu():
     return ReplyKeyboardMarkup(
@@ -83,7 +82,6 @@ def get_stats_submenu():
 
 def get_more_submenu(user_id: int = None):
     buttons = [
-        # Кнопка "🔍 Поиск по VIN" удалена
         [KeyboardButton(text="📸 Все чеки")],
         [KeyboardButton(text="💎 Купить Premium")],
         [KeyboardButton(text="📞 Помощь / О боте")],
