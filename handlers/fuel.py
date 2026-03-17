@@ -63,8 +63,6 @@ async def liters_cost_entered(message: types.Message, state: FSMContext):
         except ValueError:
             await message.answer("❌ Неверный формат. Введите литры и сумму через пробел (например: 45.5 3000).")
     elif len(parts) == 1:
-        # Быстрый ввод: только сумма, литры рассчитываются из средней цены?
-        # Здесь можно реализовать логику, но для простоты предложим ввести оба значения
         await message.answer("❌ Пожалуйста, введите и литры, и сумму через пробел.")
     else:
         await message.answer("❌ Неверный формат. Введите литры и сумму через пробел.")
@@ -80,15 +78,10 @@ async def mileage_entered(message: types.Message, state: FSMContext):
             await message.answer("❌ Введите корректный пробег (число).")
             return
         await state.update_data(mileage=mileage)
-    # Далее запрос типа топлива
     await state.set_state(FuelStates.waiting_for_fuel_type)
-    await message.answer(
-        "Выберите тип топлива:",
-        reply_markup=get_fuel_type_keyboard()
-    )
+    await message.answer("Выберите тип топлива:", reply_markup=get_fuel_type_keyboard())
 
 def get_fuel_type_keyboard():
-    from config import config
     buttons = []
     for key, value in config.DEFAULT_FUEL_TYPES.items():
         buttons.append([types.InlineKeyboardButton(text=value, callback_data=f"fuel_{key}")])
@@ -97,10 +90,8 @@ def get_fuel_type_keyboard():
 @router.callback_query(FuelStates.waiting_for_fuel_type, F.data.startswith("fuel_"))
 async def fuel_type_chosen(callback: types.CallbackQuery, state: FSMContext):
     fuel_key = callback.data.split("_", 1)[1]
-    from config import config
     fuel_type = config.DEFAULT_FUEL_TYPES.get(fuel_key, fuel_key)
     await state.update_data(fuel_type=fuel_type)
-    # Предложение добавить фото
     await state.set_state(FuelStates.waiting_for_photo)
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
         [types.InlineKeyboardButton(text="✅ Да, добавить фото", callback_data="photo_yes")],
@@ -115,7 +106,6 @@ async def photo_decision(callback: types.CallbackQuery, state: FSMContext):
         await state.set_state(FuelStates.waiting_for_photo)
         await callback.message.edit_text("Отправьте фото чека.")
     else:
-        # Сохраняем заправку без фото
         await save_fuel_event(callback.message, state, photo_id=None)
     await callback.answer()
 
