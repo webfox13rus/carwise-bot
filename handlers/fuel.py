@@ -30,7 +30,6 @@ async def add_fuel_start(message: types.Message, state: FSMContext):
         if not cars:
             await message.answer("У вас нет автомобилей. Сначала добавьте авто.", reply_markup=get_fuel_submenu())
             return
-        # Создаём список кортежей (id, название) для клавиатуры и состояния
         cars_list = [(car.id, f"{car.brand} {car.model}") for car in cars]
         await state.update_data(cars=cars_list)
         await state.set_state(FuelStates.waiting_for_car)
