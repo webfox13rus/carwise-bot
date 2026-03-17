@@ -34,11 +34,12 @@ async def add_maintenance_start(message: types.Message, state: FSMContext):
         if not cars:
             await message.answer("У вас нет автомобилей. Сначала добавьте авто.", reply_markup=get_maintenance_submenu())
             return
-        # Сохраняем список авто как кортежи (id, название)
-        await state.update_data(cars=[(car.id, f"{car.brand} {car.model}") for car in cars])
+        # Создаём список кортежей (id, название) для клавиатуры и состояния
+        cars_list = [(car.id, f"{car.brand} {car.model}") for car in cars]
+        await state.update_data(cars=cars_list)
         await state.set_state(MaintenanceStates.waiting_for_car)
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
-            [types.InlineKeyboardButton(text=name, callback_data=f"car_{car_id}")] for car_id, name in cars
+            [types.InlineKeyboardButton(text=name, callback_data=f"car_{car_id}")] for car_id, name in cars_list
         ])
         await message.answer("Выберите автомобиль:", reply_markup=keyboard)
 
@@ -113,7 +114,9 @@ async def part_interval_months_entered(message: types.Message, state: FSMContext
             return
         await state.update_data(part_interval_months=interval_months)
     # Переходим к описанию (для детали описание может быть автоматическим)
-    await state.update_data(description=f"Замена {part_name}")  # упростим
+    # (предполагается, что part_name уже есть в состоянии)
+    part_name = (await state.get_data()).get("part_name", "")
+    await state.update_data(description=f"Замена {part_name}")
     await state.set_state(MaintenanceStates.waiting_for_cost)
     await message.answer("Введите стоимость (в рублях):")
 
