@@ -180,6 +180,16 @@ async def fuel_chosen(callback: types.CallbackQuery, state: FSMContext):
     from config import config
     fuel_type = config.DEFAULT_FUEL_TYPES.get(fuel_key, fuel_key)
     data = await state.get_data()
+    
+    # Проверяем наличие обязательных полей
+    brand = data.get("brand")
+    year = data.get("year")
+    if not brand or not year:
+        await callback.message.answer("❌ Ошибка: не хватает данных об автомобиле. Попробуйте добавить авто заново.")
+        await state.clear()
+        await callback.answer()
+        return
+    
     with SessionLocal() as db:
         user = db.query(User).filter(User.telegram_id == callback.from_user.id).first()
         if not user:
@@ -189,9 +199,9 @@ async def fuel_chosen(callback: types.CallbackQuery, state: FSMContext):
             return
         new_car = Car(
             user_id=user.id,
-            brand=data.get("brand"),
+            brand=brand,
             model=data.get("model", ""),
-            year=data.get("year"),
+            year=year,
             name=data.get("name", ""),
             vin=data.get("vin"),
             current_mileage=data.get("mileage", 0),
@@ -203,7 +213,7 @@ async def fuel_chosen(callback: types.CallbackQuery, state: FSMContext):
         logger.info(f"Добавлен автомобиль {new_car.brand} {new_car.model} для пользователя {user.telegram_id}")
     await state.clear()
     await callback.message.answer(
-        f"✅ Автомобиль {data.get('brand')} {data.get('model', '')} успешно добавлен!",
+        f"✅ Автомобиль {brand} {data.get('model', '')} успешно добавлен!",
         reply_markup=get_cars_submenu()
     )
     await callback.answer()
