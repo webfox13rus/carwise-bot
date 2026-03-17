@@ -229,11 +229,12 @@ async def update_mileage_start(message: types.Message, state: FSMContext):
         if not cars:
             await message.answer("У вас нет автомобилей.", reply_markup=get_cars_submenu())
             return
-        # Сохраняем список авто в состоянии
-        await state.update_data(cars=[(car.id, f"{car.brand} {car.model} {car.year}") for car in cars])
+        # Создаём список кортежей для состояния и клавиатуры
+        cars_list = [(car.id, f"{car.brand} {car.model} {car.year}") for car in cars]
+        await state.update_data(cars=cars_list)
         await state.set_state(CarStates.waiting_for_car_to_update_mileage)
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
-            [types.InlineKeyboardButton(text=name, callback_data=f"car_{car_id}")] for car_id, name in cars
+            [types.InlineKeyboardButton(text=name, callback_data=f"car_{car_id}")] for car_id, name in cars_list
         ])
         await message.answer("Выберите автомобиль для обновления пробега:", reply_markup=keyboard)
 
@@ -278,10 +279,12 @@ async def delete_car_start(message: types.Message, state: FSMContext):
         if not cars:
             await message.answer("У вас нет автомобилей.", reply_markup=get_cars_submenu())
             return
-        await state.update_data(cars=[(car.id, f"{car.brand} {car.model} {car.year}") for car in cars])
+        # Создаём список кортежей для состояния и клавиатуры
+        cars_list = [(car.id, f"{car.brand} {car.model} {car.year}") for car in cars]
+        await state.update_data(cars=cars_list)
         await state.set_state(CarStates.waiting_for_car_to_delete)
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
-            [types.InlineKeyboardButton(text=name, callback_data=f"del_{car_id}")] for car_id, name in cars
+            [types.InlineKeyboardButton(text=name, callback_data=f"del_{car_id}")] for car_id, name in cars_list
         ])
         await message.answer("Выберите автомобиль для удаления (скрытия):", reply_markup=keyboard)
 
