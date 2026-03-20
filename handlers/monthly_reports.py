@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timedelta
 from aiogram import Router, types, F
+from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy import func, and_
 
@@ -12,7 +13,6 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 def get_monthly_stats(db, user_id, year, month):
-    """Возвращает словарь с суммами топлива и обслуживания за месяц, используя переданную сессию."""
     start_date = datetime(year, month, 1)
     if month == 12:
         end_date = datetime(year+1, 1, 1)
@@ -22,7 +22,6 @@ def get_monthly_stats(db, user_id, year, month):
     cars = db.query(Car).filter(Car.user_id == user_id, Car.is_active == True).all()
     total_fuel = 0
     total_maintenance = 0
-    car_details = []
 
     for car in cars:
         fuel = db.query(func.sum(FuelEvent.cost)).filter(
@@ -30,30 +29,20 @@ def get_monthly_stats(db, user_id, year, month):
             FuelEvent.date >= start_date,
             FuelEvent.date < end_date
         ).scalar() or 0
-
         maint = db.query(func.sum(MaintenanceEvent.cost)).filter(
             MaintenanceEvent.car_id == car.id,
             MaintenanceEvent.date >= start_date,
             MaintenanceEvent.date < end_date
         ).scalar() or 0
-
         total_fuel += fuel
         total_maintenance += maint
-        car_details.append({
-            "name": f"{car.brand} {car.model}",
-            "fuel": fuel,
-            "maint": maint,
-            "mileage": car.current_mileage
-        })
 
     return {
         "total_fuel": total_fuel,
-        "total_maintenance": total_maintenance,
-        "cars": car_details
+        "total_maintenance": total_maintenance
     }
 
 def format_monthly_report(db, user_id, year, month, with_comparison=False):
-    """Формирует текст отчёта, используя переданную сессию."""
     current = get_monthly_stats(db, user_id, year, month)
     month_name = datetime(year, month, 1).strftime('%B %Y')
 
@@ -62,10 +51,6 @@ def format_monthly_report(db, user_id, year, month, with_comparison=False):
         prev_year = year if month > 1 else year - 1
         previous = get_monthly_stats(db, user_id, prev_year, prev_month)
 
-        fuel_diff = current["total_fuel"] - previous["total_fuel"]
-        maint_diff = current["total_maintenance"] - previous["total_maintenance"]
-        total_diff = (current["total_fuel"] + current["total_maintenance"]) - (previous["total_fuel"] + previous["total_maintenance"])
-
         def format_diff(val):
             if val > 0:
                 return f"📈 +{val:,.2f} ₽"
@@ -73,6 +58,10 @@ def format_monthly_report(db, user_id, year, month, with_comparison=False):
                 return f"📉 {val:,.2f} ₽"
             else:
                 return "➖ 0 ₽"
+
+        fuel_diff = current["total_fuel"] - previous["total_fuel"]
+        maint_diff = current["total_maintenance"] - previous["total_maintenance"]
+        total_diff = (current["total_fuel"] + current["total_maintenance"]) - (previous["total_fuel"] + previous["total_maintenance"])
 
         header = f"📊 *Сравнение расходов: {month_name}*"
         lines = [
