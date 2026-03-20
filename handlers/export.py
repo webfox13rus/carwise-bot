@@ -4,15 +4,15 @@ from datetime import datetime
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.types import BufferedInputFile
+from decimal import Decimal
 
 from database import SessionLocal, User, Car, FuelEvent, MaintenanceEvent, Insurance, Part
-from keyboards.main_menu import get_stats_submenu, get_main_menu
+from keyboards.main_menu import get_stats_submenu
 from config import config
 
 router = Router()
 
-# Добавлен новый вариант текста кнопки
-@router.message(F.text.in_(["📤 Экспорт данных (Premium)", "📤 Экспорт данных", "📤 Экспорт в CSV"]))
+@router.message(F.text == "📤 Экспорт данных (Premium)")
 @router.message(Command("export"))
 async def export_data(message: types.Message):
     with SessionLocal() as db:
@@ -26,7 +26,7 @@ async def export_data(message: types.Message):
         if not user.is_premium and not is_admin:
             await message.answer(
                 "❌ *Экспорт данных* доступен только для премиум-пользователей.\n\n"
-                "Оформите подписку, чтобы выгружать все свои данные в CSV для анализа в Excel.",
+                "Оформите подписку, чтобы выгружать все свои данные в CSV.",
                 parse_mode="Markdown",
                 reply_markup=get_stats_submenu()
             )
@@ -47,6 +47,7 @@ async def export_data(message: types.Message):
         for car in cars:
             car_name = f"{car.brand} {car.model} ({car.year})"
 
+            # Заправки
             fuel_events = db.query(FuelEvent).filter(FuelEvent.car_id == car.id).all()
             for ev in fuel_events:
                 writer.writerow([
@@ -55,14 +56,15 @@ async def export_data(message: types.Message):
                     ev.date.strftime('%Y-%m-%d %H:%M'),
                     '',
                     ev.mileage if ev.mileage else '',
-                    ev.cost,
-                    ev.liters,
+                    float(ev.cost),
+                    float(ev.liters),
                     ev.fuel_type or '',
                     '',
                     '',
                     ''
                 ])
 
+            # Обслуживание
             maint_events = db.query(MaintenanceEvent).filter(MaintenanceEvent.car_id == car.id).all()
             for ev in maint_events:
                 writer.writerow([
@@ -71,7 +73,7 @@ async def export_data(message: types.Message):
                     ev.date.strftime('%Y-%m-%d %H:%M'),
                     ev.description,
                     ev.mileage if ev.mileage else '',
-                    ev.cost,
+                    float(ev.cost),
                     '',
                     ev.category,
                     '',
@@ -79,6 +81,7 @@ async def export_data(message: types.Message):
                     ''
                 ])
 
+            # Страховки
             insurances = db.query(Insurance).filter(Insurance.car_id == car.id).all()
             for ins in insurances:
                 writer.writerow([
@@ -87,7 +90,7 @@ async def export_data(message: types.Message):
                     ins.end_date.strftime('%Y-%m-%d'),
                     ins.notes or '',
                     '',
-                    ins.cost,
+                    float(ins.cost),
                     '',
                     '',
                     f"{ins.policy_number or ''} / {ins.company or ''}",
@@ -95,10 +98,11 @@ async def export_data(message: types.Message):
                     ''
                 ])
 
+            # Детали и жидкости
             parts = db.query(Part).filter(Part.car_id == car.id).all()
             for part in parts:
                 writer.writerow([
-                    'Деталь',
+                    'Деталь/Жидкость',
                     car_name,
                     part.last_date.strftime('%Y-%m-%d') if part.last_date else '',
                     part.name,
@@ -124,5 +128,4 @@ async def export_data(message: types.Message):
             ),
             caption="📊 Ваши данные в формате CSV. Открыть можно в Excel или любом табличном редакторе."
         )
-
         await message.answer("Выберите действие:", reply_markup=get_stats_submenu())
