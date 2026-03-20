@@ -10,9 +10,12 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from database import SessionLocal, User, Car, FuelEvent, MaintenanceEvent, Insurance, Admin, BannedUser
 from config import config
 from keyboards.main_menu import get_main_menu, get_more_submenu
-
-# Импорт функций планировщика из main.py (для тестов)
-from handlers.scheduler_functions import check_insurances, check_maintenance_reminders, check_parts_reminders, send_monthly_reports
+from handlers.scheduler_functions import (
+    check_insurances,
+    check_maintenance_reminders,
+    check_parts_reminders,
+    send_monthly_reports
+)
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -54,6 +57,7 @@ async def admin_panel(message: types.Message):
         [InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")],
         [InlineKeyboardButton(text="👑 Управление админами", callback_data="admin_manage_admins")],
         [InlineKeyboardButton(text="🔨 Заблокированные", callback_data="admin_banned")],
+        [InlineKeyboardButton(text="🔔 Проверка оповещений", callback_data="admin_test_notifications")],
         [InlineKeyboardButton(text="❌ Закрыть", callback_data="admin_close")]
     ])
     await message.answer(
@@ -406,34 +410,76 @@ async def banned_list(callback: types.CallbackQuery):
         await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=keyboard)
     await callback.answer()
 
-# ---------- Тестовые команды для проверки напоминаний (только для админов) ----------
-@router.message(Command("test_insurances"))
-async def test_insurances(message: types.Message):
-    if not is_admin(message.from_user.id):
+# ---------- Проверка оповещений (подменю) ----------
+@router.callback_query(F.data == "admin_test_notifications")
+async def admin_test_notifications(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа", show_alert=True)
         return
-    await check_insurances(message.bot)
-    await message.answer("✅ Проверка страховок выполнена")
 
-@router.message(Command("test_maintenance"))
-async def test_maintenance(message: types.Message):
-    if not is_admin(message.from_user.id):
-        return
-    await check_maintenance_reminders(message.bot)
-    await message.answer("✅ Проверка ТО выполнена")
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📅 Страховки", callback_data="test_insurances")],
+        [InlineKeyboardButton(text="🔧 ТО", callback_data="test_maintenance")],
+        [InlineKeyboardButton(text="⚙️ Детали/жидкости", callback_data="test_parts")],
+        [InlineKeyboardButton(text="📊 Ежемесячные отчёты", callback_data="test_monthly")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_panel_back")]
+    ])
+    await callback.message.edit_text(
+        "🔔 *Выберите тип оповещения для проверки:*\n"
+        "После нажатия бот выполнит проверку и отправит уведомления, если они должны были сработать.",
+        parse_mode="Markdown",
+        reply_markup=keyboard
+    )
+    await callback.answer()
 
-@router.message(Command("test_parts"))
-async def test_parts(message: types.Message):
-    if not is_admin(message.from_user.id):
+# ---------- Тестовые вызовы функций ----------
+@router.callback_query(F.data == "test_insurances")
+async def test_insurances_callback(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа", show_alert=True)
         return
-    await check_parts_reminders(message.bot)
-    await message.answer("✅ Проверка деталей выполнена")
+    await callback.message.edit_text("⏳ Проверяю страховки...")
+    await check_insurances(callback.bot)
+    await callback.message.edit_text("✅ Проверка страховок выполнена.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_test_notifications")]
+    ]))
+    await callback.answer()
 
-@router.message(Command("test_monthly"))
-async def test_monthly(message: types.Message):
-    if not is_admin(message.from_user.id):
+@router.callback_query(F.data == "test_maintenance")
+async def test_maintenance_callback(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа", show_alert=True)
         return
-    await send_monthly_reports(message.bot)
-    await message.answer("✅ Ежемесячные отчёты отправлены")
+    await callback.message.edit_text("⏳ Проверяю напоминания ТО...")
+    await check_maintenance_reminders(callback.bot)
+    await callback.message.edit_text("✅ Проверка ТО выполнена.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_test_notifications")]
+    ]))
+    await callback.answer()
+
+@router.callback_query(F.data == "test_parts")
+async def test_parts_callback(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа", show_alert=True)
+        return
+    await callback.message.edit_text("⏳ Проверяю замены деталей...")
+    await check_parts_reminders(callback.bot)
+    await callback.message.edit_text("✅ Проверка деталей выполнена.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_test_notifications")]
+    ]))
+    await callback.answer()
+
+@router.callback_query(F.data == "test_monthly")
+async def test_monthly_callback(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа", show_alert=True)
+        return
+    await callback.message.edit_text("⏳ Отправляю ежемесячные отчёты...")
+    await send_monthly_reports(callback.bot)
+    await callback.message.edit_text("✅ Ежемесячные отчёты отправлены.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_test_notifications")]
+    ]))
+    await callback.answer()
 
 # ---------- Кнопка "Назад" в админ-панель ----------
 @router.callback_query(F.data == "admin_panel_back")
