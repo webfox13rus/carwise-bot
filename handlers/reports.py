@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from sqlalchemy import func
+from decimal import Decimal
 
 from database import SessionLocal, Car, FuelEvent, MaintenanceEvent, User, Insurance, Part
 from keyboards.main_menu import get_stats_submenu
@@ -11,7 +12,7 @@ from config import config
 router = Router()
 logger = logging.getLogger(__name__)
 
-# ------------------- Краткая статистика (без изменений) -------------------
+# ------------------- Краткая статистика -------------------
 def get_short_stats(db, user_id):
     cars = db.query(Car).filter(Car.user_id == user_id, Car.is_active == True).all()
     total_fuel = 0
@@ -22,6 +23,11 @@ def get_short_stats(db, user_id):
     for car in cars:
         fuel = db.query(func.sum(FuelEvent.cost)).filter(FuelEvent.car_id == car.id).scalar() or 0
         maint = db.query(func.sum(MaintenanceEvent.cost)).filter(MaintenanceEvent.car_id == car.id).scalar() or 0
+        # Преобразуем Decimal в float для суммирования
+        if isinstance(fuel, Decimal):
+            fuel = float(fuel)
+        if isinstance(maint, Decimal):
+            maint = float(maint)
         total_fuel += fuel
         total_maintenance += maint
         total_mileage += car.current_mileage
@@ -43,25 +49,25 @@ def get_last_fuel_events(db, car_id, limit=3):
     """Возвращает последние limit заправок для автомобиля с рассчитанным расходом."""
     events = db.query(FuelEvent).filter(FuelEvent.car_id == car_id).order_by(FuelEvent.date.desc()).limit(limit).all()
     result = []
-    # Для расчёта расхода нужно отсортировать по возрастанию даты
+    # Сортируем по возрастанию даты для расчёта расхода
     events_asc = sorted(events, key=lambda x: x.date)
     for i, ev in enumerate(events_asc):
-        # Если есть следующая заправка, можно рассчитать расход между ними
         consumption = None
         if i > 0:
             prev = events_asc[i-1]
             if ev.mileage and prev.mileage and ev.mileage > prev.mileage:
                 distance = ev.mileage - prev.mileage
-                consumption = (ev.liters / distance) * 100
+                # Преобразуем Decimal в float перед делением
+                consumption = (float(ev.liters) / distance) * 100
         result.append({
             "date": ev.date.strftime('%d.%m.%Y'),
-            "liters": ev.liters,
-            "cost": ev.cost,
+            "liters": float(ev.liters),
+            "cost": float(ev.cost),
             "mileage": ev.mileage,
-            "price_per_liter": ev.cost / ev.liters if ev.liters else 0,
+            "price_per_liter": float(ev.cost) / float(ev.liters) if ev.liters else 0,
             "consumption": consumption
         })
-    # Вернуть в обратном порядке (сначала новые)
+    # Возвращаем в обратном порядке (сначала новые)
     return list(reversed(result))
 
 def get_upcoming_parts(db, car_id):
@@ -99,7 +105,7 @@ def get_insurance_info(db, car_id):
     status = "⚠️ истекла" if days_left < 0 else f"✅ {days_left} дн."
     return f"{ins.company} (до {ins.end_date.strftime('%d.%m.%Y')}) – {status}"
 
-# ------------------- Детальная статистика (обновлённая) -------------------
+# ------------------- Детальная статистика -------------------
 def get_detailed_stats(db, user_id):
     cars = db.query(Car).filter(Car.user_id == user_id, Car.is_active == True).all()
     result = []
@@ -107,13 +113,14 @@ def get_detailed_stats(db, user_id):
         # Основные расходы
         total_fuel = db.query(func.sum(FuelEvent.cost)).filter(FuelEvent.car_id == car.id).scalar() or 0
         total_maint = db.query(func.sum(MaintenanceEvent.cost)).filter(MaintenanceEvent.car_id == car.id).scalar() or 0
+        total_fuel = float(total_fuel) if isinstance(total_fuel, Decimal) else total_fuel
+        total_maint = float(total_maint) if isinstance(total_maint, Decimal) else total_maint
         total_expenses = total_fuel + total_maint
 
         # Средний расход (на основе последних 10 заправок)
         fuel_events = db.query(FuelEvent).filter(FuelEvent.car_id == car.id).order_by(FuelEvent.date.desc()).limit(10).all()
         avg_consumption = None
         if len(fuel_events) >= 2:
-            # Сортируем по возрастанию даты для расчёта
             sorted_events = sorted(fuel_events, key=lambda x: x.date)
             total_liters = 0
             total_distance = 0
@@ -124,7 +131,7 @@ def get_detailed_stats(db, user_id):
                     total_liters += ev.liters
                 prev = ev
             if total_distance > 0:
-                avg_consumption = (total_liters / total_distance) * 100
+                avg_consumption = (float(total_liters) / total_distance) * 100
 
         # Последние заправки
         last_fuel = get_last_fuel_events(db, car.id)
@@ -240,5 +247,3 @@ async def export_data(message: types.Message):
             return
         # Здесь будет логика экспорта (пока заглушка)
         await message.answer("Функция экспорта данных в разработке. Скоро будет доступна.", reply_markup=get_stats_submenu())
-
-# ... (остальные обработчики, если есть)
