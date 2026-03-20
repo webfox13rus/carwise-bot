@@ -11,7 +11,7 @@ from config import config
 router = Router()
 logger = logging.getLogger(__name__)
 
-# Функция для получения краткой статистики по всем авто пользователя
+# ------------------- Краткая статистика (без изменений) -------------------
 def get_short_stats(db, user_id):
     cars = db.query(Car).filter(Car.user_id == user_id, Car.is_active == True).all()
     total_fuel = 0
@@ -38,61 +38,117 @@ def get_short_stats(db, user_id):
         "cars": details
     }
 
-# Функция для получения детальной статистики (расширенной)
+# ------------------- Вспомогательные функции для детальной статистики -------------------
+def get_last_fuel_events(db, car_id, limit=3):
+    """Возвращает последние limit заправок для автомобиля с рассчитанным расходом."""
+    events = db.query(FuelEvent).filter(FuelEvent.car_id == car_id).order_by(FuelEvent.date.desc()).limit(limit).all()
+    result = []
+    # Для расчёта расхода нужно отсортировать по возрастанию даты
+    events_asc = sorted(events, key=lambda x: x.date)
+    for i, ev in enumerate(events_asc):
+        # Если есть следующая заправка, можно рассчитать расход между ними
+        consumption = None
+        if i > 0:
+            prev = events_asc[i-1]
+            if ev.mileage and prev.mileage and ev.mileage > prev.mileage:
+                distance = ev.mileage - prev.mileage
+                consumption = (ev.liters / distance) * 100
+        result.append({
+            "date": ev.date.strftime('%d.%m.%Y'),
+            "liters": ev.liters,
+            "cost": ev.cost,
+            "mileage": ev.mileage,
+            "price_per_liter": ev.cost / ev.liters if ev.liters else 0,
+            "consumption": consumption
+        })
+    # Вернуть в обратном порядке (сначала новые)
+    return list(reversed(result))
+
+def get_upcoming_parts(db, car_id):
+    """Возвращает список деталей/жидкостей, срок замены которых близок."""
+    today = datetime.utcnow().date()
+    parts = db.query(Part).filter(Part.car_id == car_id).all()
+    upcoming = []
+    for part in parts:
+        reasons = []
+        if part.interval_mileage and part.last_mileage is not None:
+            next_mileage = part.last_mileage + part.interval_mileage
+            remaining_km = next_mileage - part.car.current_mileage
+            if remaining_km <= 0:
+                reasons.append("⚠️ пора менять")
+            elif remaining_km <= 10000:
+                reasons.append(f"осталось {remaining_km:,.0f} км")
+        if part.interval_months and part.last_date is not None:
+            next_date = part.last_date + timedelta(days=30 * part.interval_months)
+            days_left = (next_date.date() - today).days
+            if days_left <= 0:
+                reasons.append("⚠️ пора менять")
+            elif days_left <= 90:
+                reasons.append(f"осталось {days_left} дн.")
+        if reasons:
+            upcoming.append(f"• {part.name}: {', '.join(reasons)}")
+    return upcoming
+
+def get_insurance_info(db, car_id):
+    """Возвращает информацию о страховке (если есть)."""
+    ins = db.query(Insurance).filter(Insurance.car_id == car_id).order_by(Insurance.end_date.desc()).first()
+    if not ins:
+        return "не оформлена"
+    today = datetime.utcnow().date()
+    days_left = (ins.end_date.date() - today).days
+    status = "⚠️ истекла" if days_left < 0 else f"✅ {days_left} дн."
+    return f"{ins.company} (до {ins.end_date.strftime('%d.%m.%Y')}) – {status}"
+
+# ------------------- Детальная статистика (обновлённая) -------------------
 def get_detailed_stats(db, user_id):
     cars = db.query(Car).filter(Car.user_id == user_id, Car.is_active == True).all()
     result = []
     for car in cars:
-        # Расход топлива за последние 10 заправок
+        # Основные расходы
+        total_fuel = db.query(func.sum(FuelEvent.cost)).filter(FuelEvent.car_id == car.id).scalar() or 0
+        total_maint = db.query(func.sum(MaintenanceEvent.cost)).filter(MaintenanceEvent.car_id == car.id).scalar() or 0
+        total_expenses = total_fuel + total_maint
+
+        # Средний расход (на основе последних 10 заправок)
         fuel_events = db.query(FuelEvent).filter(FuelEvent.car_id == car.id).order_by(FuelEvent.date.desc()).limit(10).all()
+        avg_consumption = None
         if len(fuel_events) >= 2:
-            total_liters = sum(ev.liters for ev in fuel_events if ev.liters)
+            # Сортируем по возрастанию даты для расчёта
+            sorted_events = sorted(fuel_events, key=lambda x: x.date)
+            total_liters = 0
             total_distance = 0
             prev = None
-            for ev in sorted(fuel_events, key=lambda x: x.date):
+            for ev in sorted_events:
                 if prev and ev.mileage and prev.mileage and ev.mileage > prev.mileage:
                     total_distance += ev.mileage - prev.mileage
+                    total_liters += ev.liters
                 prev = ev
-            avg_consumption = (total_liters / total_distance * 100) if total_distance > 0 else 0
-        else:
-            avg_consumption = 0
+            if total_distance > 0:
+                avg_consumption = (total_liters / total_distance) * 100
 
-        # Страховка (ближайшая)
-        insurances = db.query(Insurance).filter(Insurance.car_id == car.id).all()
-        if insurances:
-            nearest_ins = min(insurances, key=lambda x: x.end_date)
-            insurance_expiry = nearest_ins.end_date.strftime('%d.%m.%Y')
-            days_left = (nearest_ins.end_date.date() - datetime.utcnow().date()).days
-        else:
-            insurance_expiry = "не оформлена"
-            days_left = "—"
+        # Последние заправки
+        last_fuel = get_last_fuel_events(db, car.id)
 
-        # Предстоящие замены деталей
-        parts = db.query(Part).filter(Part.car_id == car.id).all()
-        upcoming_parts = []
-        for part in parts:
-            if part.interval_mileage and part.last_mileage:
-                next_mileage = part.last_mileage + part.interval_mileage
-                remaining_mileage = next_mileage - car.current_mileage
-                if remaining_mileage > 0 and remaining_mileage < 10000:
-                    upcoming_parts.append(f"{part.name} (осталось {remaining_mileage:,.0f} км)")
-            if part.interval_months and part.last_date:
-                next_date = part.last_date + timedelta(days=30 * part.interval_months)
-                days_left_part = (next_date.date() - datetime.utcnow().date()).days
-                if days_left_part > 0 and days_left_part < 90:
-                    upcoming_parts.append(f"{part.name} (осталось {days_left_part} дн.)")
-        upcoming = ", ".join(upcoming_parts) if upcoming_parts else "нет"
+        # Ближайшие замены
+        upcoming_parts = get_upcoming_parts(db, car.id)
+
+        # Страховка
+        insurance_info = get_insurance_info(db, car.id)
 
         result.append({
             "car": f"{car.brand} {car.model} ({car.year})",
-            "mileage": f"{car.current_mileage:,.0f} км",
-            "avg_consumption": f"{avg_consumption:.1f} л/100км" if avg_consumption else "нет данных",
-            "insurance": insurance_expiry,
-            "days_left": days_left,
-            "upcoming": upcoming
+            "mileage": car.current_mileage,
+            "total_fuel": total_fuel,
+            "total_maint": total_maint,
+            "total_expenses": total_expenses,
+            "avg_consumption": avg_consumption,
+            "last_fuel": last_fuel,
+            "upcoming_parts": upcoming_parts,
+            "insurance": insurance_info
         })
     return result
 
+# ------------------- Обработчики -------------------
 @router.message(F.text == "📊 Краткая статистика")
 async def short_stats(message: types.Message):
     with SessionLocal() as db:
@@ -130,15 +186,41 @@ async def detailed_stats(message: types.Message):
             return
         text = "📈 *Детальная статистика*\n\n"
         for car in stats:
-            text += f"🚗 {car['car']}\n"
-            text += f"  Пробег: {car['mileage']}\n"
-            text += f"  Средний расход: {car['avg_consumption']}\n"
-            text += f"  Страховка до: {car['insurance']}"
-            if car['days_left'] != "—":
-                text += f" (осталось {car['days_left']} дн.)\n"
+            text += f"🚗 *{car['car']}*\n"
+            text += f"📏 Пробег: {car['mileage']:,.0f} км\n"
+            text += f"⛽ Всего топлива: {car['total_fuel']:,.2f} ₽\n"
+            text += f"🔧 Всего обслуживания: {car['total_maint']:,.2f} ₽\n"
+            text += f"💰 Всего расходов: {car['total_expenses']:,.2f} ₽\n"
+            if car['avg_consumption']:
+                text += f"📈 Средний расход: {car['avg_consumption']:.1f} л/100км\n"
             else:
-                text += "\n"
-            text += f"  Предстоящие замены: {car['upcoming']}\n\n"
+                text += f"📈 Средний расход: недостаточно данных\n"
+
+            # Последние заправки
+            if car['last_fuel']:
+                text += f"\n*📝 Последние заправки:*\n"
+                for ev in car['last_fuel']:
+                    text += f"• {ev['date']}: {ev['liters']:.2f} л, {ev['cost']:.2f} ₽ (цена {ev['price_per_liter']:.2f} ₽/л)"
+                    if ev['mileage']:
+                        text += f", пробег {ev['mileage']:,.0f} км"
+                    if ev['consumption']:
+                        text += f", расход {ev['consumption']:.1f} л/100км"
+                    text += "\n"
+            else:
+                text += f"\n*📝 Заправок пока нет.*\n"
+
+            # Ближайшие замены
+            if car['upcoming_parts']:
+                text += f"\n*🔧 Ближайшие замены:*\n"
+                for item in car['upcoming_parts']:
+                    text += f"{item}\n"
+            else:
+                text += f"\n*🔧 Ближайших замен нет.*\n"
+
+            # Страховка
+            text += f"\n*📄 Страховка:* {car['insurance']}\n"
+            text += "\n" + "─"*20 + "\n"
+
         await message.answer(text, parse_mode="Markdown", reply_markup=get_stats_submenu())
 
 @router.message(F.text == "📤 Экспорт данных (Premium)")
@@ -151,10 +233,12 @@ async def export_data(message: types.Message):
         if not user.is_premium and message.from_user.id not in config.ADMIN_IDS:
             await message.answer(
                 "❌ *Экспорт данных* доступен только для премиум-пользователей.\n\n"
-                "Оформите подписку, чтобы выгрузить все данные в CSV.",
+                "Оформите подписку, чтобы выгружать все свои данные в CSV для анализа в Excel.",
                 parse_mode="Markdown",
                 reply_markup=get_stats_submenu()
             )
             return
         # Здесь будет логика экспорта (пока заглушка)
         await message.answer("Функция экспорта данных в разработке. Скоро будет доступна.", reply_markup=get_stats_submenu())
+
+# ... (остальные обработчики, если есть)
