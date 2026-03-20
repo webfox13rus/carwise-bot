@@ -115,15 +115,44 @@ async def mileage_entered(message: types.Message, state: FSMContext):
         await state.clear()
         await message.answer("❌ Добавление заправки отменено", reply_markup=get_fuel_submenu())
         return
-    if message.text != "⏭ Пропустить":
+
+    data = await state.get_data()
+    car_id = data.get("car_id")
+    if not car_id:
+        await message.answer("❌ Ошибка: автомобиль не выбран.")
+        await state.clear()
+        return
+
+    # Проверяем текущий пробег автомобиля в БД
+    with SessionLocal() as db:
+        car = db.query(Car).filter(Car.id == car_id, Car.is_active == True).first()
+        if not car:
+            await message.answer("❌ Автомобиль не найден.")
+            await state.clear()
+            return
+
+    if message.text == "⏭ Пропустить":
+        # Если пропустили, оставляем пробег без изменений
+        await state.update_data(mileage=None)
+    else:
         try:
             mileage = float(message.text.strip().replace(",", ""))
             if mileage < 0:
                 raise ValueError
+            # Проверка: новый пробег не должен быть меньше текущего
+            if mileage < car.current_mileage:
+                await message.answer(
+                    f"❌ Пробег не может быть меньше текущего ({car.current_mileage:,.0f} км).\n"
+                    f"Пожалуйста, введите пробег, который больше или равен текущему.\n"
+                    f"Или нажмите 'Пропустить', чтобы оставить пробег без изменений.",
+                    reply_markup=get_skip_keyboard()
+                )
+                return
             await state.update_data(mileage=mileage)
         except ValueError:
             await message.answer("❌ Введите корректный пробег (число).")
             return
+
     await state.set_state(FuelStates.waiting_for_photo)
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
         [types.InlineKeyboardButton(text="✅ Да, добавить фото", callback_data="photo_yes")],
@@ -156,6 +185,14 @@ async def save_fuel_event(message: types.Message, state: FSMContext, photo_id=No
     with SessionLocal() as db:
         car = db.query(Car).filter(Car.id == car_id).first()
         if car and mileage:
+            # Проверка ещё раз на всякий случай
+            if mileage < car.current_mileage:
+                await message.answer(
+                    f"❌ Ошибка: пробег {mileage:,.0f} км меньше текущего {car.current_mileage:,.0f} км.\n"
+                    f"Заправка не сохранена."
+                )
+                await state.clear()
+                return
             car.current_mileage = mileage
         fuel_event = FuelEvent(
             car_id=car_id,
