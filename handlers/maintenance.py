@@ -21,6 +21,9 @@ class MaintenanceStates(StatesGroup):
     waiting_for_part_name = State()
     waiting_for_part_interval_mileage = State()
     waiting_for_part_interval_months = State()
+    waiting_for_liquid_name = State()           # новое состояние для названия жидкости
+    waiting_for_liquid_interval_mileage = State()
+    waiting_for_liquid_interval_months = State()
     waiting_for_photo = State()
 
 @router.message(F.text == "🔧 Добавить событие")
@@ -70,6 +73,10 @@ async def category_chosen(callback: types.CallbackQuery, state: FSMContext):
     if category_key == "parts":
         await state.set_state(MaintenanceStates.waiting_for_part_name)
         await callback.message.edit_text("Введите название детали (например, 'Тормозные колодки'):")
+    elif category_key == "fluids":
+        # Жидкости
+        await state.set_state(MaintenanceStates.waiting_for_liquid_name)
+        await callback.message.edit_text("Введите название жидкости (например, 'Тормозная жидкость'):")
     else:
         # Устанавливаем автоматическое описание для некоторых категорий
         if category_key == "to":
@@ -147,6 +154,62 @@ async def part_interval_months_entered(message: types.Message, state: FSMContext
     await state.update_data(description=f"Замена {part_name}")
     await state.set_state(MaintenanceStates.waiting_for_cost)
     await message.answer("Введите стоимость (в рублях):", reply_markup=get_cancel_keyboard())
+
+# ---- Обработчики для жидкостей ----
+@router.message(MaintenanceStates.waiting_for_liquid_name)
+async def liquid_name_entered(message: types.Message, state: FSMContext):
+    liquid_name = message.text.strip()
+    await state.update_data(liquid_name=liquid_name)
+    await state.set_state(MaintenanceStates.waiting_for_liquid_interval_mileage)
+    await message.answer(
+        "Введите интервал замены по пробегу (в км) или нажмите 'Пропустить', если не нужен:",
+        reply_markup=get_skip_keyboard()
+    )
+
+@router.message(MaintenanceStates.waiting_for_liquid_interval_mileage)
+async def liquid_interval_mileage_entered(message: types.Message, state: FSMContext):
+    if message.text == "❌ Отмена":
+        await state.clear()
+        await message.answer("❌ Добавление отменено", reply_markup=get_maintenance_submenu())
+        return
+    if message.text != "⏭ Пропустить":
+        try:
+            interval_mileage = float(message.text.strip().replace(",", ""))
+            if interval_mileage <= 0:
+                raise ValueError
+        except ValueError:
+            await message.answer("❌ Введите положительное число (км).")
+            return
+        await state.update_data(liquid_interval_mileage=interval_mileage)
+    await state.set_state(MaintenanceStates.waiting_for_liquid_interval_months)
+    await message.answer(
+        "Введите интервал замены по времени (в месяцах) или нажмите 'Пропустить', если не нужен:",
+        reply_markup=get_skip_keyboard()
+    )
+
+@router.message(MaintenanceStates.waiting_for_liquid_interval_months)
+async def liquid_interval_months_entered(message: types.Message, state: FSMContext):
+    if message.text == "❌ Отмена":
+        await state.clear()
+        await message.answer("❌ Добавление отменено", reply_markup=get_maintenance_submenu())
+        return
+    if message.text != "⏭ Пропустить":
+        try:
+            interval_months = int(message.text.strip())
+            if interval_months <= 0:
+                raise ValueError
+        except ValueError:
+            await message.answer("❌ Введите целое положительное число (месяцы).")
+            return
+        await state.update_data(liquid_interval_months=interval_months)
+    # Устанавливаем описание для жидкости
+    data = await state.get_data()
+    liquid_name = data.get("liquid_name", "")
+    await state.update_data(description=f"Замена {liquid_name}")
+    await state.set_state(MaintenanceStates.waiting_for_cost)
+    await message.answer("Введите стоимость (в рублях):", reply_markup=get_cancel_keyboard())
+
+# ---------------------------------
 
 @router.message(MaintenanceStates.waiting_for_description)
 async def description_entered(message: types.Message, state: FSMContext):
@@ -279,6 +342,24 @@ async def save_maintenance_event(message: types.Message, state: FSMContext, phot
             db.commit()
             logger.info(f"Деталь {part_name} добавлена в Part")
 
+        # Если это жидкость (fluids), создаём запись в Part
+        if category_key == "fluids":
+            liquid_name = data.get("liquid_name")
+            interval_mileage = data.get("liquid_interval_mileage")
+            interval_months = data.get("liquid_interval_months")
+            part = Part(
+                car_id=car_id,
+                name=liquid_name,
+                interval_mileage=interval_mileage,
+                interval_months=interval_months,
+                last_mileage=mileage,
+                last_date=datetime.utcnow(),
+                notified=False
+            )
+            db.add(part)
+            db.commit()
+            logger.info(f"Жидкость {liquid_name} добавлена в Part")
+
     # Отправляем сообщение об успехе
     response = f"✅ Событие '{category}' сохранено!\nСтоимость: {cost:.2f} руб."
     if mileage:
@@ -324,14 +405,14 @@ async def planned_replacements(message: types.Message):
         if not parts:
             await message.answer("Нет данных о плановых заменах.", reply_markup=get_maintenance_submenu())
             return
-        text = "🔧 *Плановые замены деталей*\n\n"
+        text = "🔧 *Плановые замены деталей и жидкостей*\n\n"
         today = datetime.utcnow().date()
         for part in parts:
             car = part.car
             if not car:
                 continue
             text += f"• {car.brand} {car.model}:\n"
-            text += f"  Деталь: {part.name}\n"
+            text += f"  Элемент: {part.name}\n"
             if part.interval_mileage and part.last_mileage:
                 next_mileage = part.last_mileage + part.interval_mileage
                 remaining = next_mileage - car.current_mileage
