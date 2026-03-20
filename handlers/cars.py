@@ -158,12 +158,13 @@ def get_fuel_type_keyboard():
     from config import config
     buttons = []
     for key, value in config.DEFAULT_FUEL_TYPES.items():
-        buttons.append([types.InlineKeyboardButton(text=value, callback_data=f"fuel_{key}")])
+        # Используем уникальный префикс для добавления автомобиля
+        buttons.append([types.InlineKeyboardButton(text=value, callback_data=f"car_fuel_{key}")])
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
-@router.callback_query(F.data.startswith("fuel_"))
+@router.callback_query(F.data.startswith("car_fuel_"))
 async def fuel_chosen(callback: types.CallbackQuery, state: FSMContext):
-    fuel_key = callback.data.split("_", 1)[1]
+    fuel_key = callback.data.split("_")[-1]
     from config import config
     fuel_type = config.DEFAULT_FUEL_TYPES.get(fuel_key, fuel_key)
     data = await state.get_data()
