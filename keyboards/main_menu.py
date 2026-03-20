@@ -70,11 +70,10 @@ def get_insurance_submenu():
 def get_stats_submenu():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📊 Краткая статистика")],
-            [KeyboardButton(text="📈 Детальная статистика")],
-            [KeyboardButton(text="📤 Экспорт данных (Premium)")],
+            [KeyboardButton(text="📊 Статистика")],
             [KeyboardButton(text="📈 Сравнение расходов (Premium)")],
-            [KeyboardButton(text="Расширенная статистика (Premium)")],
+            [KeyboardButton(text="🤖 AI-совет (Premium)")],
+            [KeyboardButton(text="📤 Экспорт данных (Premium)")],
             [KeyboardButton(text="◀️ Назад")]
         ],
         resize_keyboard=True
