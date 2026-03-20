@@ -39,6 +39,7 @@ async def list_cars(message: types.Message):
         for car in cars:
             text += f"• {car.brand} {car.model} {car.year}г.\n"
             text += f"  Пробег: {car.current_mileage:,.0f} км\n"
+            text += f"  Топливо: {car.fuel_type}\n"
             text += "\n"
         await message.answer(text, parse_mode="Markdown", reply_markup=get_cars_submenu())
 
