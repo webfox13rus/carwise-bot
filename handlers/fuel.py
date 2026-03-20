@@ -41,6 +41,14 @@ async def add_fuel_start(message: types.Message, state: FSMContext):
 @router.callback_query(FuelStates.waiting_for_car, F.data.startswith("car_"))
 async def car_selected(callback: types.CallbackQuery, state: FSMContext):
     car_id = int(callback.data.split("_")[1])
+    # Проверим, что автомобиль действительно существует в БД (на случай сброса состояния)
+    with SessionLocal() as db:
+        car = db.query(Car).filter(Car.id == car_id, Car.is_active == True).first()
+        if not car:
+            await callback.message.edit_text("❌ Автомобиль не найден. Возможно, он был удалён. Попробуйте заново.")
+            await state.clear()
+            await callback.answer()
+            return
     await state.update_data(car_id=car_id)
     await state.set_state(FuelStates.waiting_for_fuel_type)
     await callback.message.edit_text(
@@ -52,12 +60,12 @@ async def car_selected(callback: types.CallbackQuery, state: FSMContext):
 def get_fuel_type_keyboard():
     buttons = []
     for key, value in config.DEFAULT_FUEL_TYPES.items():
-        buttons.append([types.InlineKeyboardButton(text=value, callback_data=f"fuel_{key}")])
+        buttons.append([types.InlineKeyboardButton(text=value, callback_data=f"fuel_type_{key}")])
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
-@router.callback_query(FuelStates.waiting_for_fuel_type, F.data.startswith("fuel_"))
+@router.callback_query(FuelStates.waiting_for_fuel_type, F.data.startswith("fuel_type_"))
 async def fuel_type_chosen(callback: types.CallbackQuery, state: FSMContext):
-    fuel_key = callback.data.split("_", 1)[1]
+    fuel_key = callback.data.split("_")[-1]
     fuel_type = config.DEFAULT_FUEL_TYPES.get(fuel_key, fuel_key)
     await state.update_data(fuel_type=fuel_type)
     await state.set_state(FuelStates.waiting_for_liters)
