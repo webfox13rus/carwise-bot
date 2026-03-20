@@ -77,7 +77,6 @@ def get_detailed_stats(db, user_id):
         total_maint = float(total_maint) if isinstance(total_maint, Decimal) else total_maint
         total_expenses = total_fuel + total_maint
 
-        # Средний расход
         fuel_events = db.query(FuelEvent).filter(FuelEvent.car_id == car.id).order_by(FuelEvent.date.desc()).limit(10).all()
         avg_consumption = None
         if len(fuel_events) >= 2:
@@ -110,7 +109,7 @@ def get_detailed_stats(db, user_id):
         })
     return result
 
-# ------------------- Обработчик единой статистики -------------------
+# ------------------- Обработчик статистики -------------------
 @router.message(F.text == "📊 Статистика")
 async def show_stats(message: types.Message):
     with SessionLocal() as db:
@@ -157,29 +156,3 @@ async def show_stats(message: types.Message):
             text += "\n" + "─"*20 + "\n"
 
         await message.answer(text, parse_mode="Markdown", reply_markup=get_stats_submenu())
-
-# ------------------- Сравнение расходов (Premium) -------------------
-@router.message(F.text == "📈 Сравнение расходов (Premium)")
-async def compare_stats_command(message: types.Message):
-    # Здесь логика из monthly_reports, можно оставить как заглушку или перенаправить
-    await message.answer("Функция сравнения расходов в разработке.", reply_markup=get_stats_submenu())
-
-# ------------------- Экспорт (Premium) -------------------
-@router.message(F.text == "📤 Экспорт данных (Premium)")
-async def export_data(message: types.Message):
-    with SessionLocal() as db:
-        user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
-        if not user:
-            await message.answer("Сначала зарегистрируйтесь, отправив /start")
-            return
-        if not user.is_premium and message.from_user.id not in config.ADMIN_IDS:
-            await message.answer(
-                "❌ *Экспорт данных* доступен только для премиум-пользователей.\n\n"
-                "Оформите подписку, чтобы выгружать все свои данные в CSV.",
-                parse_mode="Markdown",
-                reply_markup=get_stats_submenu()
-            )
-            return
-        # Перенаправляем на реальный экспорт (export.py)
-        from handlers.export import export_data as real_export
-        await real_export(message)
