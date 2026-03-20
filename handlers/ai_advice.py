@@ -1,9 +1,11 @@
 import logging
+import asyncio
 import uuid
 import time
 import httpx
 from datetime import datetime, timedelta
 from aiogram import Router, types, F
+from aiogram.filters import Command
 from openai import AsyncOpenAI
 from sqlalchemy import func
 
@@ -24,12 +26,10 @@ _token_cache = {
     "expires_at": 0
 }
 
-# Единый HTTP-клиент с отключённой проверкой SSL (для РФ) и таймаутами
+# Единый HTTP-клиент
 http_client = httpx.AsyncClient(verify=False, timeout=30.0)
 
 async def get_gigachat_access_token() -> str | None:
-    """Получает access token для GigaChat с кешированием."""
-    # Проверяем, не истёк ли текущий токен
     if _token_cache["access_token"] and time.time() < _token_cache["expires_at"]:
         return _token_cache["access_token"]
 
@@ -39,7 +39,7 @@ async def get_gigachat_access_token() -> str | None:
 
     headers = {
         "Content-Type": "application/x-www-form-urlencoded",
-        "RqUID": str(uuid.uuid4()),  # уникальный идентификатор
+        "RqUID": str(uuid.uuid4()),
         "Authorization": f"Basic {GIGACHAT_AUTH_KEY}"
     }
     payload = "scope=GIGACHAT_API_PERS"
@@ -50,9 +50,9 @@ async def get_gigachat_access_token() -> str | None:
             if response.status_code == 200:
                 data = response.json()
                 access_token = data.get("access_token")
-                expires_in = data.get("expires_in", 1800)  # по умолчанию 30 минут
+                expires_in = data.get("expires_in", 1800)
                 _token_cache["access_token"] = access_token
-                _token_cache["expires_at"] = time.time() + expires_in - 60  # запас 1 минута
+                _token_cache["expires_at"] = time.time() + expires_in - 60
                 logger.info("GigaChat access token получен успешно")
                 return access_token
             else:
@@ -107,7 +107,8 @@ async def get_ai_advice(car_data: dict) -> str:
         logger.exception(f"Ошибка при запросе к GigaChat: {e}")
         return "❌ Произошла ошибка при генерации совета. Попробуйте позже."
 
-@router.message(F.text == "Расширенная статистика (Premium)")
+# --- Обработчик кнопки ---
+@router.message(F.text == "🤖 AI-совет (Premium)")
 async def premium_stats(message: types.Message):
     with SessionLocal() as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
@@ -118,8 +119,8 @@ async def premium_stats(message: types.Message):
         is_admin = message.from_user.id in config.ADMIN_IDS
         if not user.is_premium and not is_admin:
             await message.answer(
-                "❌ *Функция доступна только для премиум-пользователей.*\n\n"
-                "Чтобы получить доступ к расширенной статистике с AI-советами, приобретите подписку.",
+                "❌ *AI-советы* доступны только для премиум-пользователей.\n\n"
+                "Оформите подписку, чтобы получать персональные рекомендации по обслуживанию авто.",
                 parse_mode="Markdown",
                 reply_markup=get_stats_submenu()
             )
