@@ -11,6 +11,9 @@ from database import SessionLocal, User, Car, FuelEvent, MaintenanceEvent, Insur
 from config import config
 from keyboards.main_menu import get_main_menu, get_more_submenu
 
+# Импорт функций планировщика из main.py (для тестов)
+from main import check_insurances, check_maintenance_reminders, check_parts_reminders, send_monthly_reports
+
 router = Router()
 logger = logging.getLogger(__name__)
 
@@ -402,6 +405,35 @@ async def banned_list(callback: types.CallbackQuery):
         ])
         await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=keyboard)
     await callback.answer()
+
+# ---------- Тестовые команды для проверки напоминаний (только для админов) ----------
+@router.message(Command("test_insurances"))
+async def test_insurances(message: types.Message):
+    if not is_admin(message.from_user.id):
+        return
+    await check_insurances(message.bot)
+    await message.answer("✅ Проверка страховок выполнена")
+
+@router.message(Command("test_maintenance"))
+async def test_maintenance(message: types.Message):
+    if not is_admin(message.from_user.id):
+        return
+    await check_maintenance_reminders(message.bot)
+    await message.answer("✅ Проверка ТО выполнена")
+
+@router.message(Command("test_parts"))
+async def test_parts(message: types.Message):
+    if not is_admin(message.from_user.id):
+        return
+    await check_parts_reminders(message.bot)
+    await message.answer("✅ Проверка деталей выполнена")
+
+@router.message(Command("test_monthly"))
+async def test_monthly(message: types.Message):
+    if not is_admin(message.from_user.id):
+        return
+    await send_monthly_reports(message.bot)
+    await message.answer("✅ Ежемесячные отчёты отправлены")
 
 # ---------- Кнопка "Назад" в админ-панель ----------
 @router.callback_query(F.data == "admin_panel_back")
