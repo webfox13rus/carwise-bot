@@ -1,4 +1,4 @@
-from aiogram import Router, types
+from aiogram import Router, types, F
 from aiogram.filters import Command
 from keyboards.main_menu import get_main_menu
 from database import SessionLocal, User
@@ -9,6 +9,7 @@ router = Router()
 
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
+    # Проверяем, есть ли пользователь в БД
     with SessionLocal() as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
@@ -39,5 +40,27 @@ async def cmd_start(message: types.Message):
     )
 
 @router.message(Command("help"))
+@router.message(F.text == "📞 Помощь / О боте")
 async def cmd_help(message: types.Message):
-    await message.answer("Раздел помощи в разработке.", reply_markup=get_main_menu())
+    help_text = (
+        "📋 *CarWise Bot – полное руководство*\n\n"
+        "Бот предназначен для учёта всех расходов, связанных с автомобилем, и своевременных напоминаний.\n\n"
+        "🚗 *Главное меню*\n"
+        "Состоит из шести разделов, каждый из которых открывает своё подменю:\n"
+        "• `🚗 Мои авто` – управление автомобилями\n"
+        "• `⛽ Заправки` – учёт заправок и чеки\n"
+        "• `🔧 Обслуживание` – ТО, ремонт, запчасти, жидкости\n"
+        "• `📄 Страховки` – полисы и напоминания\n"
+        "• `📊 Статистика` – полная статистика по расходам, заправкам, заменам, страховке\n"
+        "• `⚙️ Ещё` – все чеки, покупка Premium, помощь, обратная связь, админ-панель\n\n"
+        "🔧 *Подменю «Обслуживание»*\n"
+        "• `🔧 Добавить событие` – выбор категории (ТО, мойка, ремонт, запчасти, шиномонтаж, жидкости, другое)\n"
+        "• `🔧 Плановые замены` – отчёт о деталях и жидкостях с истекающими интервалами\n"
+        "• `⏰ Напоминания ТО` – настройка интервалов для следующего ТО (по пробегу и/или времени)\n"
+        "• `📸 Мои чеки обслуживания` – просмотр фото чеков\n\n"
+        "💎 *Премиум-подписка*\n"
+        "• Цена: 50 ⭐/мес или 500 ⭐/год.\n"
+        "• Доступные функции: неограниченное количество авто, экспорт данных, сравнение расходов, AI-советы.\n\n"
+        "© 2026 CarWise Bot. Все права защищены. Не для коммерческого использования."
+    )
+    await message.answer(help_text, parse_mode="Markdown", reply_markup=get_main_menu())
