@@ -21,7 +21,7 @@ class MaintenanceStates(StatesGroup):
     waiting_for_part_name = State()
     waiting_for_part_interval_mileage = State()
     waiting_for_part_interval_months = State()
-    waiting_for_liquid_name = State()           # новое состояние для названия жидкости
+    waiting_for_liquid_name = State()
     waiting_for_liquid_interval_mileage = State()
     waiting_for_liquid_interval_months = State()
     waiting_for_photo = State()
@@ -74,11 +74,9 @@ async def category_chosen(callback: types.CallbackQuery, state: FSMContext):
         await state.set_state(MaintenanceStates.waiting_for_part_name)
         await callback.message.edit_text("Введите название детали (например, 'Тормозные колодки'):")
     elif category_key == "fluids":
-        # Жидкости
         await state.set_state(MaintenanceStates.waiting_for_liquid_name)
         await callback.message.edit_text("Введите название жидкости (например, 'Тормозная жидкость'):")
     else:
-        # Устанавливаем автоматическое описание для некоторых категорий
         if category_key == "to":
             desc = "Техническое обслуживание"
         elif category_key == "wash":
@@ -90,7 +88,6 @@ async def category_chosen(callback: types.CallbackQuery, state: FSMContext):
 
         if desc:
             await state.update_data(description=desc)
-            # Для мойки и шиномонтажа сразу переходим к стоимости, пропуская пробег
             if category_key in ("wash", "tires"):
                 await state.set_state(MaintenanceStates.waiting_for_cost)
                 await callback.message.edit_text("Введите стоимость (в рублях):")
@@ -155,7 +152,6 @@ async def part_interval_months_entered(message: types.Message, state: FSMContext
     await state.set_state(MaintenanceStates.waiting_for_cost)
     await message.answer("Введите стоимость (в рублях):", reply_markup=get_cancel_keyboard())
 
-# ---- Обработчики для жидкостей ----
 @router.message(MaintenanceStates.waiting_for_liquid_name)
 async def liquid_name_entered(message: types.Message, state: FSMContext):
     liquid_name = message.text.strip()
@@ -202,14 +198,11 @@ async def liquid_interval_months_entered(message: types.Message, state: FSMConte
             await message.answer("❌ Введите целое положительное число (месяцы).")
             return
         await state.update_data(liquid_interval_months=interval_months)
-    # Устанавливаем описание для жидкости
     data = await state.get_data()
     liquid_name = data.get("liquid_name", "")
     await state.update_data(description=f"Замена {liquid_name}")
     await state.set_state(MaintenanceStates.waiting_for_cost)
     await message.answer("Введите стоимость (в рублях):", reply_markup=get_cancel_keyboard())
-
-# ---------------------------------
 
 @router.message(MaintenanceStates.waiting_for_description)
 async def description_entered(message: types.Message, state: FSMContext):
@@ -236,11 +229,9 @@ async def cost_entered(message: types.Message, state: FSMContext):
         return
     await state.update_data(cost=cost)
     await state.set_state(MaintenanceStates.waiting_for_mileage)
-    # Проверяем категорию: для мойки и шиномонтажа пропускаем пробег
     data = await state.get_data()
     category_key = data.get("category_key")
     if category_key in ("wash", "tires"):
-        # Сразу переходим к фото
         await state.set_state(MaintenanceStates.waiting_for_photo)
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
             [types.InlineKeyboardButton(text="✅ Да, добавить фото", callback_data="photo_yes")],
@@ -268,7 +259,6 @@ async def mileage_entered(message: types.Message, state: FSMContext):
         except ValueError:
             await message.answer("❌ Введите корректный пробег (число).")
             return
-    # Предложение добавить фото
     await state.set_state(MaintenanceStates.waiting_for_photo)
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
         [types.InlineKeyboardButton(text="✅ Да, добавить фото", callback_data="photo_yes")],
@@ -303,11 +293,9 @@ async def save_maintenance_event(message: types.Message, state: FSMContext, phot
         car = db.query(Car).filter(Car.id == car_id).first()
         if car and mileage:
             car.current_mileage = mileage
-            # Обновляем дату последнего ТО, если категория ТО
             if category_key == "to":
                 car.last_maintenance_date = datetime.utcnow()
                 car.last_maintenance_mileage = mileage
-                # Сбрасываем флаги уведомлений
                 car.notified_to_mileage = False
                 car.notified_to_date = False
             db.commit()
@@ -324,7 +312,6 @@ async def save_maintenance_event(message: types.Message, state: FSMContext, phot
         db.commit()
         logger.info(f"Событие обслуживания добавлено для авто {car_id}")
 
-        # Если это замена детали (parts), создаём запись в Part
         if category_key == "parts":
             part_name = data.get("part_name")
             interval_mileage = data.get("part_interval_mileage")
@@ -342,7 +329,6 @@ async def save_maintenance_event(message: types.Message, state: FSMContext, phot
             db.commit()
             logger.info(f"Деталь {part_name} добавлена в Part")
 
-        # Если это жидкость (fluids), создаём запись в Part
         if category_key == "fluids":
             liquid_name = data.get("liquid_name")
             interval_mileage = data.get("liquid_interval_mileage")
@@ -360,7 +346,6 @@ async def save_maintenance_event(message: types.Message, state: FSMContext, phot
             db.commit()
             logger.info(f"Жидкость {liquid_name} добавлена в Part")
 
-    # Отправляем сообщение об успехе
     response = f"✅ Событие '{category}' сохранено!\nСтоимость: {cost:.2f} руб."
     if mileage:
         response += f"\nПробег: {mileage:,.0f} км"
@@ -368,7 +353,6 @@ async def save_maintenance_event(message: types.Message, state: FSMContext, phot
         response += "\nПробег не указан"
     await message.answer(response, reply_markup=get_maintenance_submenu())
 
-    # Если это ТО, предлагаем настроить интервалы следующего
     if category_key == "to":
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
             [types.InlineKeyboardButton(text="✅ Да, настроить", callback_data="set_to_reminder")],
@@ -389,6 +373,7 @@ async def to_done_callback(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.delete()
     await callback.answer()
 
+# ---------- ИСПРАВЛЕННАЯ ФУНКЦИЯ ПЛАНОВЫХ ЗАМЕН ----------
 @router.message(F.text == "🔧 Плановые замены")
 async def planned_replacements(message: types.Message):
     with SessionLocal() as db:
@@ -405,28 +390,54 @@ async def planned_replacements(message: types.Message):
         if not parts:
             await message.answer("Нет данных о плановых заменах.", reply_markup=get_maintenance_submenu())
             return
+
         text = "🔧 *Плановые замены деталей и жидкостей*\n\n"
         today = datetime.utcnow().date()
+        found = False
         for part in parts:
             car = part.car
             if not car:
                 continue
-            text += f"• {car.brand} {car.model}:\n"
-            text += f"  Элемент: {part.name}\n"
-            if part.interval_mileage and part.last_mileage:
+
+            # Проверяем, есть ли хотя бы один интервал
+            has_interval = False
+            reasons = []
+
+            if part.interval_mileage and part.last_mileage is not None:
+                has_interval = True
                 next_mileage = part.last_mileage + part.interval_mileage
                 remaining = next_mileage - car.current_mileage
-                text += f"  По пробегу: осталось {remaining:,.0f} км (до {next_mileage:,.0f} км)\n"
-            if part.interval_months and part.last_date:
+                if remaining <= 0:
+                    reasons.append("⚠️ пора менять")
+                else:
+                    reasons.append(f"осталось {remaining:,.0f} км")
+
+            if part.interval_months and part.last_date is not None:
+                has_interval = True
                 next_date = part.last_date + timedelta(days=30 * part.interval_months)
                 days_left = (next_date.date() - today).days
-                text += f"  По времени: осталось {days_left} дн. (до {next_date.strftime('%d.%m.%Y')})\n"
+                if days_left <= 0:
+                    reasons.append("⚠️ пора менять")
+                else:
+                    reasons.append(f"осталось {days_left} дн.")
+
+            if not has_interval:
+                continue  # пропускаем детали без интервалов
+
+            found = True
+            text += f"• {car.brand} {car.model}:\n"
+            text += f"  Элемент: {part.name}\n"
+            if reasons:
+                text += f"  {', '.join(reasons)}\n"
             text += "\n"
-        await message.answer(text, parse_mode="Markdown", reply_markup=get_maintenance_submenu())
+
+        if not found:
+            await message.answer("Все элементы в порядке, замены не требуются.", reply_markup=get_maintenance_submenu())
+        else:
+            await message.answer(text, parse_mode="Markdown", reply_markup=get_maintenance_submenu())
 
 @router.message(F.text == "⏰ Напоминания ТО")
 async def to_reminders_settings(message: types.Message, state: FSMContext):
-    # Перенаправляем на reminders
     from handlers.reminders import set_reminder_start
     await set_reminder_start(message, state)
 
