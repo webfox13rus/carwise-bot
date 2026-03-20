@@ -12,44 +12,10 @@ from config import config
 router = Router()
 logger = logging.getLogger(__name__)
 
-# ------------------- Краткая статистика -------------------
-def get_short_stats(db, user_id):
-    cars = db.query(Car).filter(Car.user_id == user_id, Car.is_active == True).all()
-    total_fuel = 0
-    total_maintenance = 0
-    total_mileage = 0
-    details = []
-
-    for car in cars:
-        fuel = db.query(func.sum(FuelEvent.cost)).filter(FuelEvent.car_id == car.id).scalar() or 0
-        maint = db.query(func.sum(MaintenanceEvent.cost)).filter(MaintenanceEvent.car_id == car.id).scalar() or 0
-        # Преобразуем Decimal в float для суммирования
-        if isinstance(fuel, Decimal):
-            fuel = float(fuel)
-        if isinstance(maint, Decimal):
-            maint = float(maint)
-        total_fuel += fuel
-        total_maintenance += maint
-        total_mileage += car.current_mileage
-        details.append({
-            "name": f"{car.brand} {car.model}",
-            "fuel": fuel,
-            "maint": maint,
-            "mileage": car.current_mileage
-        })
-    return {
-        "total_fuel": total_fuel,
-        "total_maintenance": total_maintenance,
-        "total_mileage": total_mileage,
-        "cars": details
-    }
-
-# ------------------- Вспомогательные функции для детальной статистики -------------------
+# ------------------- Вспомогательные функции -------------------
 def get_last_fuel_events(db, car_id, limit=3):
-    """Возвращает последние limit заправок для автомобиля с рассчитанным расходом."""
     events = db.query(FuelEvent).filter(FuelEvent.car_id == car_id).order_by(FuelEvent.date.desc()).limit(limit).all()
     result = []
-    # Сортируем по возрастанию даты для расчёта расхода
     events_asc = sorted(events, key=lambda x: x.date)
     for i, ev in enumerate(events_asc):
         consumption = None
@@ -57,7 +23,6 @@ def get_last_fuel_events(db, car_id, limit=3):
             prev = events_asc[i-1]
             if ev.mileage and prev.mileage and ev.mileage > prev.mileage:
                 distance = ev.mileage - prev.mileage
-                # Преобразуем Decimal в float перед делением
                 consumption = (float(ev.liters) / distance) * 100
         result.append({
             "date": ev.date.strftime('%d.%m.%Y'),
@@ -67,11 +32,9 @@ def get_last_fuel_events(db, car_id, limit=3):
             "price_per_liter": float(ev.cost) / float(ev.liters) if ev.liters else 0,
             "consumption": consumption
         })
-    # Возвращаем в обратном порядке (сначала новые)
     return list(reversed(result))
 
 def get_upcoming_parts(db, car_id):
-    """Возвращает список деталей/жидкостей, срок замены которых близок."""
     today = datetime.utcnow().date()
     parts = db.query(Part).filter(Part.car_id == car_id).all()
     upcoming = []
@@ -96,7 +59,6 @@ def get_upcoming_parts(db, car_id):
     return upcoming
 
 def get_insurance_info(db, car_id):
-    """Возвращает информацию о страховке (если есть)."""
     ins = db.query(Insurance).filter(Insurance.car_id == car_id).order_by(Insurance.end_date.desc()).first()
     if not ins:
         return "не оформлена"
@@ -105,19 +67,17 @@ def get_insurance_info(db, car_id):
     status = "⚠️ истекла" if days_left < 0 else f"✅ {days_left} дн."
     return f"{ins.company} (до {ins.end_date.strftime('%d.%m.%Y')}) – {status}"
 
-# ------------------- Детальная статистика -------------------
 def get_detailed_stats(db, user_id):
     cars = db.query(Car).filter(Car.user_id == user_id, Car.is_active == True).all()
     result = []
     for car in cars:
-        # Основные расходы
         total_fuel = db.query(func.sum(FuelEvent.cost)).filter(FuelEvent.car_id == car.id).scalar() or 0
         total_maint = db.query(func.sum(MaintenanceEvent.cost)).filter(MaintenanceEvent.car_id == car.id).scalar() or 0
         total_fuel = float(total_fuel) if isinstance(total_fuel, Decimal) else total_fuel
         total_maint = float(total_maint) if isinstance(total_maint, Decimal) else total_maint
         total_expenses = total_fuel + total_maint
 
-        # Средний расход (на основе последних 10 заправок)
+        # Средний расход
         fuel_events = db.query(FuelEvent).filter(FuelEvent.car_id == car.id).order_by(FuelEvent.date.desc()).limit(10).all()
         avg_consumption = None
         if len(fuel_events) >= 2:
@@ -133,13 +93,8 @@ def get_detailed_stats(db, user_id):
             if total_distance > 0:
                 avg_consumption = (float(total_liters) / total_distance) * 100
 
-        # Последние заправки
         last_fuel = get_last_fuel_events(db, car.id)
-
-        # Ближайшие замены
         upcoming_parts = get_upcoming_parts(db, car.id)
-
-        # Страховка
         insurance_info = get_insurance_info(db, car.id)
 
         result.append({
@@ -155,33 +110,9 @@ def get_detailed_stats(db, user_id):
         })
     return result
 
-# ------------------- Обработчики -------------------
-@router.message(F.text == "📊 Краткая статистика")
-async def short_stats(message: types.Message):
-    with SessionLocal() as db:
-        user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
-        if not user:
-            await message.answer("Сначала зарегистрируйтесь, отправив /start")
-            return
-        stats = get_short_stats(db, user.id)
-        if not stats["cars"]:
-            await message.answer("У вас нет автомобилей.", reply_markup=get_stats_submenu())
-            return
-        text = "📊 *Краткая статистика*\n\n"
-        for car in stats["cars"]:
-            text += f"🚗 {car['name']}\n"
-            text += f"  Пробег: {car['mileage']:,.0f} км\n"
-            text += f"  Топливо: {car['fuel']:,.2f} ₽\n"
-            text += f"  Обслуживание: {car['maint']:,.2f} ₽\n\n"
-        text += f"*Итого по всем авто:*\n"
-        text += f"⛽ Топливо: {stats['total_fuel']:,.2f} ₽\n"
-        text += f"🔧 Обслуживание: {stats['total_maintenance']:,.2f} ₽\n"
-        text += f"💰 Всего: {stats['total_fuel'] + stats['total_maintenance']:,.2f} ₽\n"
-        text += f"📏 Общий пробег: {stats['total_mileage']:,.0f} км"
-        await message.answer(text, parse_mode="Markdown", reply_markup=get_stats_submenu())
-
-@router.message(F.text == "📈 Детальная статистика")
-async def detailed_stats(message: types.Message):
+# ------------------- Обработчик единой статистики -------------------
+@router.message(F.text == "📊 Статистика")
+async def show_stats(message: types.Message):
     with SessionLocal() as db:
         user = db.query(User).filter(User.telegram_id == message.from_user.id).first()
         if not user:
@@ -191,7 +122,7 @@ async def detailed_stats(message: types.Message):
         if not stats:
             await message.answer("У вас нет автомобилей.", reply_markup=get_stats_submenu())
             return
-        text = "📈 *Детальная статистика*\n\n"
+        text = "📊 *Статистика*\n\n"
         for car in stats:
             text += f"🚗 *{car['car']}*\n"
             text += f"📏 Пробег: {car['mileage']:,.0f} км\n"
@@ -203,7 +134,6 @@ async def detailed_stats(message: types.Message):
             else:
                 text += f"📈 Средний расход: недостаточно данных\n"
 
-            # Последние заправки
             if car['last_fuel']:
                 text += f"\n*📝 Последние заправки:*\n"
                 for ev in car['last_fuel']:
@@ -216,7 +146,6 @@ async def detailed_stats(message: types.Message):
             else:
                 text += f"\n*📝 Заправок пока нет.*\n"
 
-            # Ближайшие замены
             if car['upcoming_parts']:
                 text += f"\n*🔧 Ближайшие замены:*\n"
                 for item in car['upcoming_parts']:
@@ -224,12 +153,18 @@ async def detailed_stats(message: types.Message):
             else:
                 text += f"\n*🔧 Ближайших замен нет.*\n"
 
-            # Страховка
             text += f"\n*📄 Страховка:* {car['insurance']}\n"
             text += "\n" + "─"*20 + "\n"
 
         await message.answer(text, parse_mode="Markdown", reply_markup=get_stats_submenu())
 
+# ------------------- Сравнение расходов (Premium) -------------------
+@router.message(F.text == "📈 Сравнение расходов (Premium)")
+async def compare_stats_command(message: types.Message):
+    # Здесь логика из monthly_reports, можно оставить как заглушку или перенаправить
+    await message.answer("Функция сравнения расходов в разработке.", reply_markup=get_stats_submenu())
+
+# ------------------- Экспорт (Premium) -------------------
 @router.message(F.text == "📤 Экспорт данных (Premium)")
 async def export_data(message: types.Message):
     with SessionLocal() as db:
@@ -240,10 +175,11 @@ async def export_data(message: types.Message):
         if not user.is_premium and message.from_user.id not in config.ADMIN_IDS:
             await message.answer(
                 "❌ *Экспорт данных* доступен только для премиум-пользователей.\n\n"
-                "Оформите подписку, чтобы выгружать все свои данные в CSV для анализа в Excel.",
+                "Оформите подписку, чтобы выгружать все свои данные в CSV.",
                 parse_mode="Markdown",
                 reply_markup=get_stats_submenu()
             )
             return
-        # Здесь будет логика экспорта (пока заглушка)
-        await message.answer("Функция экспорта данных в разработке. Скоро будет доступна.", reply_markup=get_stats_submenu())
+        # Перенаправляем на реальный экспорт (export.py)
+        from handlers.export import export_data as real_export
+        await real_export(message)
