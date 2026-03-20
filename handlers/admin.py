@@ -12,7 +12,7 @@ from config import config
 from keyboards.main_menu import get_main_menu, get_more_submenu
 
 # Импорт функций планировщика из main.py (для тестов)
-from main import check_insurances, check_maintenance_reminders, check_parts_reminders, send_monthly_reports
+from handlers.scheduler_functions import check_insurances, check_maintenance_reminders, check_parts_reminders, send_monthly_reports
 
 router = Router()
 logger = logging.getLogger(__name__)
