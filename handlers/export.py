@@ -4,7 +4,6 @@ from datetime import datetime
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.types import BufferedInputFile
-from decimal import Decimal
 
 from database import SessionLocal, User, Car, FuelEvent, MaintenanceEvent, Insurance, Part
 from keyboards.main_menu import get_stats_submenu
@@ -21,12 +20,11 @@ async def export_data(message: types.Message):
             await message.answer("Сначала зарегистрируйтесь, отправив /start")
             return
 
-        # Проверка премиум-статуса (админы тоже имеют доступ)
         is_admin = message.from_user.id in config.ADMIN_IDS
         if not user.is_premium and not is_admin:
             await message.answer(
                 "❌ *Экспорт данных* доступен только для премиум-пользователей.\n\n"
-                "Оформите подписку, чтобы выгружать все свои данные в CSV.",
+                "Оформите подписку, чтобы выгружать все свои данные в CSV для анализа в Excel.",
                 parse_mode="Markdown",
                 reply_markup=get_stats_submenu()
             )
@@ -47,7 +45,6 @@ async def export_data(message: types.Message):
         for car in cars:
             car_name = f"{car.brand} {car.model} ({car.year})"
 
-            # Заправки
             fuel_events = db.query(FuelEvent).filter(FuelEvent.car_id == car.id).all()
             for ev in fuel_events:
                 writer.writerow([
@@ -64,7 +61,6 @@ async def export_data(message: types.Message):
                     ''
                 ])
 
-            # Обслуживание
             maint_events = db.query(MaintenanceEvent).filter(MaintenanceEvent.car_id == car.id).all()
             for ev in maint_events:
                 writer.writerow([
@@ -81,7 +77,6 @@ async def export_data(message: types.Message):
                     ''
                 ])
 
-            # Страховки
             insurances = db.query(Insurance).filter(Insurance.car_id == car.id).all()
             for ins in insurances:
                 writer.writerow([
@@ -98,7 +93,6 @@ async def export_data(message: types.Message):
                     ''
                 ])
 
-            # Детали и жидкости
             parts = db.query(Part).filter(Part.car_id == car.id).all()
             for part in parts:
                 writer.writerow([
