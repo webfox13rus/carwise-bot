@@ -110,6 +110,32 @@ def get_detailed_stats(db, user_id):
     return result
 
 # ------------------- Обработчик статистики -------------------
+async def send_long_message(message: types.Message, text: str, reply_markup=None, max_len=4000):
+    """Разбивает длинный текст на части и отправляет."""
+    if len(text) <= max_len:
+        await message.answer(text, parse_mode="Markdown", reply_markup=reply_markup)
+        return
+
+    parts = []
+    current_part = ""
+    for line in text.split('\n'):
+        if len(current_part) + len(line) + 1 > max_len:
+            parts.append(current_part)
+            current_part = line
+        else:
+            if current_part:
+                current_part += "\n" + line
+            else:
+                current_part = line
+    if current_part:
+        parts.append(current_part)
+
+    for i, part in enumerate(parts):
+        if i == len(parts) - 1:
+            await message.answer(part, parse_mode="Markdown", reply_markup=reply_markup)
+        else:
+            await message.answer(part, parse_mode="Markdown")
+
 @router.message(F.text == "📊 Статистика")
 async def show_stats(message: types.Message):
     with SessionLocal() as db:
@@ -155,4 +181,4 @@ async def show_stats(message: types.Message):
             text += f"\n*📄 Страховка:* {car['insurance']}\n"
             text += "\n" + "─"*20 + "\n"
 
-        await message.answer(text, parse_mode="Markdown", reply_markup=get_stats_submenu())
+        await send_long_message(message, text, reply_markup=get_stats_submenu())
