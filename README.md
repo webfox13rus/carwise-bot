@@ -33,38 +33,6 @@
 - **GigaChat** – API для AI‑советов
 - **Railway** – хостинг (или любой PaaS с поддержкой Python и PostgreSQL)
 
----
-
-## 📦 Установка и запуск
-
-### 1. Клонирование репозитория
-```bash
-git clone https://github.com/webfox13rus/carwise-bot.git
-cd carwise-bot
-
-2. Настройка виртуального окружения
-ython -m venv venv
-source venv/bin/activate  # Linux/Mac
-venv\Scripts\activate     # Windows
-
-3. Установка зависимостей
-pip install -r requirements.txt
-
-4. Настройка переменных окружения
-BOT_TOKEN=ваш_токен_бота_от_BotFather
-DATABASE_URL=postgresql://user:password@host:port/database
-ADMIN_IDS=712843452[,другие_id_через_запятую]
-FEEDBACK_CHAT_ID=-1001234567890   # ID группы для обратной связи
-GIGACHAT_AUTH_KEY=ваш_ключ_GigaChat
-PREMIUM_PRICE_MONTH=50
-PREMIUM_PRICE_YEAR=500
-
-5. Инициализация базы данных
-При первом запуске таблицы создадутся автоматически.
-
-6. Запуск бота
-python main.py
-
 📁 Структура проекта
 CarWise_Bot/
 ├── handlers/                 # Обработчики команд и сообщений
@@ -146,5 +114,37 @@ Aiogram – за отличный фреймворк
 GigaChat – за AI‑советы
 
 Railway – за простой хостинг
+
+
+## 📦 Установка и запуск
+
+### 1. Клонирование репозитория
+```bash
+git clone https://github.com/webfox13rus/carwise-bot.git
+cd carwise-bot
+
+2. Настройка виртуального окружения
+ython -m venv venv
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
+
+3. Установка зависимостей
+pip install -r requirements.txt
+
+4. Настройка переменных окружения
+BOT_TOKEN=ваш_токен_бота_от_BotFather
+DATABASE_URL=postgresql://user:password@host:port/database
+ADMIN_IDS=712843452[,другие_id_через_запятую]
+FEEDBACK_CHAT_ID=-1001234567890   # ID группы для обратной связи
+GIGACHAT_AUTH_KEY=ваш_ключ_GigaChat
+PREMIUM_PRICE_MONTH=50
+PREMIUM_PRICE_YEAR=500
+
+5. Инициализация базы данных
+При первом запуске таблицы создадутся автоматически.
+
+6. Запуск бота
+python main.py
+
 
 CarWise Bot – ваш надёжный спутник в мире автомобильных расходов! 🚗💨
