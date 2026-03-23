@@ -140,8 +140,8 @@ pip install -r requirements.txt
 4. Настройка переменных окружения
 BOT_TOKEN=ваш_токен_бота_от_BotFather
 DATABASE_URL=postgresql://user:password@host:port/database
-ADMIN_IDS=712843452[,другие_id_через_запятую]
-FEEDBACK_CHAT_ID=-1001234567890   # ID группы для обратной связи
+ADMIN_IDS= [,другие_id_через_запятую]
+FEEDBACK_CHAT_ID=  # ID группы для обратной связи
 GIGACHAT_AUTH_KEY=ваш_ключ_GigaChat
 PREMIUM_PRICE_MONTH=50
 PREMIUM_PRICE_YEAR=500
