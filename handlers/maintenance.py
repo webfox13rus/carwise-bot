@@ -77,6 +77,7 @@ async def category_chosen(callback: types.CallbackQuery, state: FSMContext):
         await state.set_state(MaintenanceStates.waiting_for_liquid_name)
         await callback.message.edit_text("Введите название жидкости (например, 'Тормозная жидкость'):")
     else:
+        # Устанавливаем автоматическое описание для некоторых категорий
         if category_key == "to":
             desc = "Техническое обслуживание"
         elif category_key == "wash":
@@ -145,7 +146,6 @@ async def part_interval_months_entered(message: types.Message, state: FSMContext
             await message.answer("❌ Введите целое положительное число (месяцы).")
             return
         await state.update_data(part_interval_months=interval_months)
-    # Получаем part_name из состояния
     data = await state.get_data()
     part_name = data.get("part_name", "")
     await state.update_data(description=f"Замена {part_name}")
@@ -373,7 +373,6 @@ async def to_done_callback(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.delete()
     await callback.answer()
 
-# ---------- ИСПРАВЛЕННАЯ ФУНКЦИЯ ПЛАНОВЫХ ЗАМЕН ----------
 @router.message(F.text == "🔧 Плановые замены")
 async def planned_replacements(message: types.Message):
     with SessionLocal() as db:
@@ -390,51 +389,30 @@ async def planned_replacements(message: types.Message):
         if not parts:
             await message.answer("Нет данных о плановых заменах.", reply_markup=get_maintenance_submenu())
             return
-
         text = "🔧 *Плановые замены деталей и жидкостей*\n\n"
         today = datetime.utcnow().date()
-        found = False
         for part in parts:
             car = part.car
             if not car:
                 continue
-
-            # Проверяем, есть ли хотя бы один интервал
-            has_interval = False
-            reasons = []
-
-            if part.interval_mileage and part.last_mileage is not None:
-                has_interval = True
+            text += f"• {car.brand} {car.model}:\n"
+            text += f"  Элемент: {part.name}\n"
+            if part.interval_mileage and part.last_mileage:
                 next_mileage = part.last_mileage + part.interval_mileage
                 remaining = next_mileage - car.current_mileage
                 if remaining <= 0:
-                    reasons.append("⚠️ пора менять")
+                    text += f"  По пробегу: ⚠️ пора менять\n"
                 else:
-                    reasons.append(f"осталось {remaining:,.0f} км")
-
-            if part.interval_months and part.last_date is not None:
-                has_interval = True
+                    text += f"  По пробегу: осталось {remaining:,.0f} км (до {next_mileage:,.0f} км)\n"
+            if part.interval_months and part.last_date:
                 next_date = part.last_date + timedelta(days=30 * part.interval_months)
                 days_left = (next_date.date() - today).days
                 if days_left <= 0:
-                    reasons.append("⚠️ пора менять")
+                    text += f"  По времени: ⚠️ пора менять\n"
                 else:
-                    reasons.append(f"осталось {days_left} дн.")
-
-            if not has_interval:
-                continue  # пропускаем детали без интервалов
-
-            found = True
-            text += f"• {car.brand} {car.model}:\n"
-            text += f"  Элемент: {part.name}\n"
-            if reasons:
-                text += f"  {', '.join(reasons)}\n"
+                    text += f"  По времени: осталось {days_left} дн. (до {next_date.strftime('%d.%m.%Y')})\n"
             text += "\n"
-
-        if not found:
-            await message.answer("Все элементы в порядке, замены не требуются.", reply_markup=get_maintenance_submenu())
-        else:
-            await message.answer(text, parse_mode="Markdown", reply_markup=get_maintenance_submenu())
+        await message.answer(text, parse_mode="Markdown", reply_markup=get_maintenance_submenu())
 
 @router.message(F.text == "⏰ Напоминания ТО")
 async def to_reminders_settings(message: types.Message, state: FSMContext):
