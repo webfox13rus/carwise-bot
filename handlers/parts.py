@@ -22,34 +22,39 @@ async def show_parts(message: types.Message):
             await message.answer("У вас нет автомобилей.", reply_markup=get_maintenance_submenu())
             return
 
-        lines = ["🔧 Плановые замены:\n"]
+        lines = ["🔧 *Плановые замены деталей и жидкостей*\n"]
         found = False
+        today = datetime.utcnow().date()
         for car in cars:
             parts = db.query(Part).filter(Part.car_id == car.id).all()
+            car_has_items = False
             for part in parts:
                 reasons = []
                 # Проверка по пробегу
                 if part.interval_mileage and part.last_mileage is not None:
                     next_mileage = part.last_mileage + part.interval_mileage
                     if car.current_mileage >= next_mileage:
-                        reasons.append("⚠️ пробег (пора менять!)")
+                        reasons.append("⚠️ пора менять")
                     else:
                         remaining = next_mileage - car.current_mileage
                         reasons.append(f"осталось {remaining:,.0f} км")
                 # Проверка по дате
                 if part.interval_months and part.last_date is not None:
                     next_date = part.last_date + timedelta(days=30 * part.interval_months)
-                    days_left = (next_date.date() - datetime.now().date()).days
+                    days_left = (next_date.date() - today).days
                     if days_left <= 0:
-                        reasons.append("⚠️ время (пора менять!)")
+                        reasons.append("⚠️ пора менять")
                     else:
                         reasons.append(f"осталось {days_left} дн.")
                 if reasons:
+                    if not car_has_items:
+                        lines.append(f"🚗 *{car.brand} {car.model}*:")
+                        car_has_items = True
+                    lines.append(f"  • {part.name}: {', '.join(reasons)}")
                     found = True
-                    lines.append(
-                        f"🚗 {car.brand} {car.model}\n"
-                        f"  • {part.name}: {', '.join(reasons)}"
-                    )
+            if car_has_items:
+                lines.append("")  # пустая строка между авто
+
         if not found:
-            lines.append("Все детали в порядке, напоминаний нет.")
-        await message.answer("\n\n".join(lines), reply_markup=get_maintenance_submenu())
+            lines.append("Все детали и жидкости в порядке, напоминаний нет.")
+        await message.answer("\n".join(lines), parse_mode="Markdown", reply_markup=get_maintenance_submenu())
