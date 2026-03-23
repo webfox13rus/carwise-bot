@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import logging.handlers
 import os
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -40,13 +41,24 @@ from handlers.scheduler_functions import (
     send_monthly_reports
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
+# ------------------- Настройка логирования -------------------
+log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+date_format = "%Y-%m-%d %H:%M:%S"
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# Консольный обработчик
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(logging.Formatter(log_format, date_format))
+logger.addHandler(console_handler)
+
+# Файловый обработчик с ротацией (10 МБ, 5 бэкапов)
+file_handler = logging.handlers.RotatingFileHandler(
+    'carwise.log', maxBytes=10*1024*1024, backupCount=5, encoding='utf-8'
+)
+file_handler.setFormatter(logging.Formatter(log_format, date_format))
+logger.addHandler(file_handler)
 
 # ------------------- Точка входа -------------------
 async def main():
