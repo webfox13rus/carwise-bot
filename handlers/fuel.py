@@ -41,7 +41,6 @@ async def add_fuel_start(message: types.Message, state: FSMContext):
 @router.callback_query(FuelStates.waiting_for_car, F.data.startswith("car_"))
 async def car_selected(callback: types.CallbackQuery, state: FSMContext):
     car_id = int(callback.data.split("_")[1])
-    # Проверим, что автомобиль действительно существует в БД (на случай сброса состояния)
     with SessionLocal() as db:
         car = db.query(Car).filter(Car.id == car_id, Car.is_active == True).first()
         if not car:
@@ -123,36 +122,73 @@ async def mileage_entered(message: types.Message, state: FSMContext):
         await state.clear()
         return
 
-    # Проверяем текущий пробег автомобиля в БД
     with SessionLocal() as db:
         car = db.query(Car).filter(Car.id == car_id, Car.is_active == True).first()
         if not car:
             await message.answer("❌ Автомобиль не найден.")
             await state.clear()
             return
+        current_mileage = car.current_mileage
 
     if message.text == "⏭ Пропустить":
-        # Если пропустили, оставляем пробег без изменений
         await state.update_data(mileage=None)
     else:
         try:
             mileage = float(message.text.strip().replace(",", ""))
             if mileage < 0:
                 raise ValueError
-            # Проверка: новый пробег не должен быть меньше текущего
-            if mileage < car.current_mileage:
+            if mileage < current_mileage:
                 await message.answer(
-                    f"❌ Пробег не может быть меньше текущего ({car.current_mileage:,.0f} км).\n"
+                    f"❌ Пробег не может быть меньше текущего ({current_mileage:,.0f} км).\n"
                     f"Пожалуйста, введите пробег, который больше или равен текущему.\n"
                     f"Или нажмите 'Пропустить', чтобы оставить пробег без изменений.",
                     reply_markup=get_skip_keyboard()
                 )
+                return
+            # Проверка на аномальный скачок (более 1000 км)
+            if mileage - current_mileage > 1000:
+                await message.answer(
+                    f"⚠️ Внимание: новый пробег ({mileage:,.0f} км) превышает предыдущий более чем на 1000 км.\n"
+                    f"Пожалуйста, проверьте правильность ввода.\n"
+                    f"Если всё верно, нажмите 'Подтвердить'.",
+                    reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+                        [types.InlineKeyboardButton(text="✅ Подтвердить", callback_data="confirm_mileage")],
+                        [types.InlineKeyboardButton(text="✏️ Ввести заново", callback_data="retry_mileage")]
+                    ])
+                )
+                # Сохраняем введённое значение в состояние для подтверждения
+                await state.update_data(pending_mileage=mileage)
                 return
             await state.update_data(mileage=mileage)
         except ValueError:
             await message.answer("❌ Введите корректный пробег (число).")
             return
 
+    await proceed_to_photo(message, state)
+
+@router.callback_query(F.data == "confirm_mileage")
+async def confirm_high_mileage(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    mileage = data.get("pending_mileage")
+    if mileage:
+        await state.update_data(mileage=mileage)
+        await state.update_data(pending_mileage=None)
+        await proceed_to_photo(callback.message, state)
+    else:
+        await callback.message.answer("❌ Ошибка: не удалось подтвердить пробег.")
+    await callback.answer()
+
+@router.callback_query(F.data == "retry_mileage")
+async def retry_mileage(callback: types.CallbackQuery, state: FSMContext):
+    await state.update_data(pending_mileage=None)
+    await state.set_state(FuelStates.waiting_for_mileage)
+    await callback.message.edit_text(
+        "Введите пробег (в км) или нажмите 'Пропустить', чтобы пропустить:",
+        reply_markup=get_skip_keyboard()
+    )
+    await callback.answer()
+
+async def proceed_to_photo(message: types.Message, state: FSMContext):
     await state.set_state(FuelStates.waiting_for_photo)
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
         [types.InlineKeyboardButton(text="✅ Да, добавить фото", callback_data="photo_yes")],
@@ -185,7 +221,6 @@ async def save_fuel_event(message: types.Message, state: FSMContext, photo_id=No
     with SessionLocal() as db:
         car = db.query(Car).filter(Car.id == car_id).first()
         if car and mileage:
-            # Проверка ещё раз на всякий случай
             if mileage < car.current_mileage:
                 await message.answer(
                     f"❌ Ошибка: пробег {mileage:,.0f} км меньше текущего {car.current_mileage:,.0f} км.\n"
