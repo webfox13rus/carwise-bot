@@ -69,11 +69,11 @@ PREMIUM_PRICE_YEAR=500
 
 ### 6. Запуск бота
 bash
-python main.py
+python main.py.
 
 ---
 
-### Структура проекта
+### Структура проекта.
 text
 CarWise_Bot/
 ├── handlers/                 # Обработчики команд и сообщений
