@@ -389,30 +389,41 @@ async def planned_replacements(message: types.Message):
         if not parts:
             await message.answer("Нет данных о плановых заменах.", reply_markup=get_maintenance_submenu())
             return
-        text = "🔧 *Плановые замены деталей и жидкостей*\n\n"
+
+        lines = ["🔧 *Плановые замены деталей и жидкостей*\n"]
+        found = False
         today = datetime.utcnow().date()
         for part in parts:
             car = part.car
             if not car:
                 continue
-            text += f"• {car.brand} {car.model}:\n"
-            text += f"  Элемент: {part.name}\n"
-            if part.interval_mileage and part.last_mileage:
+            reasons = []
+            if part.interval_mileage and part.last_mileage is not None:
                 next_mileage = part.last_mileage + part.interval_mileage
-                remaining = next_mileage - car.current_mileage
-                if remaining <= 0:
-                    text += f"  По пробегу: ⚠️ пора менять\n"
+                if car.current_mileage >= next_mileage:
+                    reasons.append("⚠️ пора менять")
                 else:
-                    text += f"  По пробегу: осталось {remaining:,.0f} км (до {next_mileage:,.0f} км)\n"
-            if part.interval_months and part.last_date:
+                    remaining = next_mileage - car.current_mileage
+                    reasons.append(f"осталось {remaining:,.0f} км")
+            if part.interval_months and part.last_date is not None:
                 next_date = part.last_date + timedelta(days=30 * part.interval_months)
                 days_left = (next_date.date() - today).days
                 if days_left <= 0:
-                    text += f"  По времени: ⚠️ пора менять\n"
+                    reasons.append("⚠️ пора менять")
                 else:
-                    text += f"  По времени: осталось {days_left} дн. (до {next_date.strftime('%d.%m.%Y')})\n"
-            text += "\n"
-        await message.answer(text, parse_mode="Markdown", reply_markup=get_maintenance_submenu())
+                    reasons.append(f"осталось {days_left} дн.")
+
+            if not reasons:
+                continue  # не выводим детали без интервалов
+
+            found = True
+            lines.append(f"🚗 *{car.brand} {car.model}*:")
+            lines.append(f"  • {part.name}: {', '.join(reasons)}")
+            lines.append("")  # пустая строка между авто
+
+        if not found:
+            lines.append("Все детали и жидкости в порядке, напоминаний нет.")
+        await message.answer("\n".join(lines), parse_mode="Markdown", reply_markup=get_maintenance_submenu())
 
 @router.message(F.text == "⏰ Напоминания ТО")
 async def to_reminders_settings(message: types.Message, state: FSMContext):
