@@ -17,13 +17,11 @@ async def check_insurances(bot):
     try:
         with SessionLocal() as db:
             today = datetime.utcnow().date()
+            # Страховки, истекающие в ближайшие 7 дней (включая уже просроченные для уведомления о просрочке)
             insurances = db.query(Insurance).options(
                 selectinload(Insurance.car).selectinload(Car.owner)
             ).filter(
-                and_(
-                    Insurance.end_date <= today + timedelta(days=7),
-                    Insurance.end_date > today
-                )
+                Insurance.end_date <= today + timedelta(days=7)
             ).all()
 
             for ins in insurances:
@@ -36,7 +34,8 @@ async def check_insurances(bot):
 
                 days_left = (ins.end_date.date() - today).days
 
-                if days_left <= 7 and not ins.notified_7d:
+                # Уведомление за 7 дней
+                if 0 < days_left <= 7 and not ins.notified_7d:
                     await bot.send_message(
                         user_id,
                         f"⚠️ Напоминание о страховке!\n\n"
@@ -48,7 +47,30 @@ async def check_insurances(bot):
                     db.commit()
                     logger.info(f"Уведомление за 7 дней отправлено пользователю {user_id}")
 
-            # Аналогично для 3 дней и просроченных (опущено для краткости)
+                # Уведомление за 3 дня (если ещё не отправлено)
+                elif 0 < days_left <= 3 and not ins.notified_3d:
+                    await bot.send_message(
+                        user_id,
+                        f"⚠️⚠️ СРОЧНО! Страховка на {car.brand} {car.model} "
+                        f"истекает через {days_left} дн. ({ins.end_date.strftime('%d.%m.%Y')}).\n"
+                        f"Продлите полис, чтобы избежать проблем."
+                    )
+                    ins.notified_3d = True
+                    db.commit()
+                    logger.info(f"Уведомление за 3 дня отправлено пользователю {user_id}")
+
+                # Уведомление о просрочке
+                elif days_left <= 0 and not ins.notified_expired:
+                    await bot.send_message(
+                        user_id,
+                        f"❗️ СРОК СТРАХОВКИ ИСТЁК!\n\n"
+                        f"Автомобиль: {car.brand} {car.model}\n"
+                        f"Страховка закончилась {ins.end_date.strftime('%d.%m.%Y')}.\n"
+                        f"Необходимо приобрести новый полис."
+                    )
+                    ins.notified_expired = True
+                    db.commit()
+                    logger.info(f"Уведомление об истечении отправлено пользователю {user_id}")
     except Exception as e:
         logger.exception(f"Ошибка в check_insurances: {e}")
 
@@ -57,7 +79,11 @@ async def check_maintenance_reminders(bot):
     try:
         with SessionLocal() as db:
             today = datetime.utcnow().date()
-            cars = db.query(Car).options(selectinload(Car.owner)).filter(Car.is_active == True).all()
+            # Загружаем только те автомобили, у которых есть интервалы ТО
+            cars = db.query(Car).options(selectinload(Car.owner)).filter(
+                Car.is_active == True,
+                (Car.to_mileage_interval != None) | (Car.to_months_interval != None)
+            ).all()
             for car in cars:
                 if not car.owner:
                     continue
@@ -104,8 +130,12 @@ async def check_parts_reminders(bot):
     try:
         with SessionLocal() as db:
             today = datetime.utcnow().date()
+            # Загружаем только детали, у которых есть интервал и которые не были уведомлены
             parts = db.query(Part).options(
                 selectinload(Part.car).selectinload(Car.owner)
+            ).filter(
+                (Part.interval_mileage != None) | (Part.interval_months != None),
+                Part.notified == False
             ).all()
             for part in parts:
                 car = part.car
@@ -120,12 +150,12 @@ async def check_parts_reminders(bot):
 
                 if part.interval_mileage and part.last_mileage is not None:
                     next_mileage = part.last_mileage + part.interval_mileage
-                    if car.current_mileage >= next_mileage and not part.notified:
+                    if car.current_mileage >= next_mileage:
                         need_notify = True
                         reasons.append("пробег")
                 if part.interval_months and part.last_date is not None:
                     next_date = part.last_date + timedelta(days=30 * part.interval_months)
-                    if next_date.date() <= today and not part.notified:
+                    if next_date.date() <= today:
                         need_notify = True
                         reasons.append("время")
 
@@ -134,7 +164,7 @@ async def check_parts_reminders(bot):
                         user_id,
                         f"⚠️ Напоминание о замене детали!\n\n"
                         f"Автомобиль: {car.brand} {car.model}\n"
-                        f"Деталь: {part.name}\n"
+                        f"Деталь/жидкость: {part.name}\n"
                         f"Причина: истёк интервал по {', '.join(reasons)}.\n"
                         f"Рекомендуется заменить."
                     )
