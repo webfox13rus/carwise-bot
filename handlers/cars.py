@@ -158,7 +158,6 @@ def get_fuel_type_keyboard():
     from config import config
     buttons = []
     for key, value in config.DEFAULT_FUEL_TYPES.items():
-        # Используем уникальный префикс для добавления автомобиля
         buttons.append([types.InlineKeyboardButton(text=value, callback_data=f"car_fuel_{key}")])
     return types.InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -169,7 +168,6 @@ async def fuel_chosen(callback: types.CallbackQuery, state: FSMContext):
     fuel_type = config.DEFAULT_FUEL_TYPES.get(fuel_key, fuel_key)
     data = await state.get_data()
     
-    # Проверяем наличие обязательных полей
     brand = data.get("brand")
     year = data.get("year")
     if not brand or not year:
