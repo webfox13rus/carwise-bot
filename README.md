@@ -39,35 +39,65 @@
 
 CarWise_Bot/
 ├── handlers/                 # Обработчики команд и сообщений
+
 │   ├── admin.py              # Админ‑панель
+
 │   ├── ai_advice.py          # AI‑советы (GigaChat)
+
 │   ├── cars.py               # Управление автомобилями
+
 │   ├── edit.py               # Редактирование записей
+
 │   ├── export.py             # Экспорт данных
+
 │   ├── feedback.py           # Обратная связь
+
 │   ├── feedback_admin.py     # Ответы на сообщения из группы
+
 │   ├── fuel.py               # Заправки
+
 │   ├── insurance.py          # Страховки
+
 │   ├── maintenance.py        # Обслуживание (ТО, мойка, ремонт и т.д.)
+
 │   ├── monthly_reports.py    # Ежемесячные отчёты
+
 │   ├── navigation.py         # Навигация по меню
+
 │   ├── parts.py              # Плановые замены
+
 │   ├── payment.py            # Покупка премиума (Telegram Stars)
+
 │   ├── photos.py             # Просмотр чеков
+
 │   ├── reminders.py          # Настройка напоминаний ТО
+
 │   ├── reports.py            # Статистика
+
 │   ├── scheduler_functions.py # Функции планировщика
+
 │   └── start.py              # Старт, помощь
+
 ├── keyboards/
+
 │   └── main_menu.py          # Клавиатуры
+
 ├── states/
+
 │   └── car_states.py         # Состояния FSM
+
 ├── database.py               # Модели SQLAlchemy
+
 ├── config.py                 # Загрузка конфигурации
+
 ├── car_data.py               # Списки марок и моделей
+
 ├── main.py                   # Точка входа
+
 ├── requirements.txt          # Зависимости
+
 ├── runtime.txt               # Версия Python (3.11.9)
+
 └── README.md                 # Документация
 
 ## 🤖 Команды бота (для пользователей)
