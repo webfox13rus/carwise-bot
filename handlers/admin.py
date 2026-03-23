@@ -160,7 +160,7 @@ async def find_user_by_id(message: types.Message, state: FSMContext):
         await message.answer(text, parse_mode="Markdown", reply_markup=keyboard)
     await state.clear()
 
-# ---------- Переключение премиум-статуса ----------
+# ---------- Переключение премиум-статуса (исправлено) ----------
 @router.callback_query(F.data.startswith("admin_toggle_premium_"))
 async def toggle_premium(callback: types.CallbackQuery):
     if not is_admin(callback.from_user.id):
@@ -172,7 +172,12 @@ async def toggle_premium(callback: types.CallbackQuery):
         if user:
             user.is_premium = not user.is_premium
             if user.is_premium:
-                user.premium_until = datetime.now() + timedelta(days=365)
+                # Если у пользователя уже есть активная подписка, продлеваем от её окончания
+                if user.premium_until and user.premium_until > datetime.now():
+                    base_date = user.premium_until
+                else:
+                    base_date = datetime.now()
+                user.premium_until = base_date + timedelta(days=365)
             else:
                 user.premium_until = None
             db.commit()
@@ -304,7 +309,6 @@ async def remove_admin_by_id(message: types.Message, state: FSMContext):
         await message.answer("❌ Введите корректное число.")
         return
 
-    # Запрет на самоудаление
     if admin_id == message.from_user.id:
         await message.answer("❌ Нельзя удалить самого себя.")
         await state.clear()
@@ -375,7 +379,7 @@ async def broadcast_confirm(callback: types.CallbackQuery, state: FSMContext):
             try:
                 await callback.bot.send_message(user.telegram_id, text, parse_mode="Markdown")
                 sent += 1
-                await asyncio.sleep(0.05)  # задержка 50 мс
+                await asyncio.sleep(0.05)
             except Exception as e:
                 logger.error(f"Ошибка отправки пользователю {user.telegram_id}: {e}")
                 failed += 1
@@ -410,7 +414,7 @@ async def banned_list(callback: types.CallbackQuery):
         await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=keyboard)
     await callback.answer()
 
-# ---------- Проверка оповещений (подменю) ----------
+# ---------- Проверка оповещений ----------
 @router.callback_query(F.data == "admin_test_notifications")
 async def admin_test_notifications(callback: types.CallbackQuery):
     if not is_admin(callback.from_user.id):
@@ -432,7 +436,6 @@ async def admin_test_notifications(callback: types.CallbackQuery):
     )
     await callback.answer()
 
-# ---------- Тестовые вызовы функций ----------
 @router.callback_query(F.data == "test_insurances")
 async def test_insurances_callback(callback: types.CallbackQuery):
     if not is_admin(callback.from_user.id):
