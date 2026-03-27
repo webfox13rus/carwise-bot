@@ -154,6 +154,9 @@ async def save_insurance(message: types.Message, state: FSMContext, photo_id=Non
     notes = data.get("notes")
 
     with SessionLocal() as db:
+        # Деактивируем все предыдущие страховки для этого автомобиля
+        db.query(Insurance).filter(Insurance.car_id == car_id).update({"is_active": False})
+
         insurance = Insurance(
             car_id=car_id,
             policy_number=policy,
@@ -163,13 +166,14 @@ async def save_insurance(message: types.Message, state: FSMContext, photo_id=Non
             cost=cost,
             notes=notes,
             photo_id=photo_id,
+            is_active=True,
             notified_7d=False,
             notified_3d=False,
             notified_expired=False
         )
         db.add(insurance)
         db.commit()
-        logger.info(f"Страховка добавлена для авто {car_id}")
+        logger.info(f"Страховка добавлена для авто {car_id}, старые страховки деактивированы")
 
     await message.answer(
         f"✅ Страховка добавлена!\n"
@@ -193,7 +197,8 @@ async def list_insurances(message: types.Message):
             await message.answer("У вас нет автомобилей.", reply_markup=get_insurance_submenu())
             return
         car_ids = [car.id for car in cars]
-        insurances = db.query(Insurance).filter(Insurance.car_id.in_(car_ids)).order_by(Insurance.end_date).all()
+        # Показываем все страховки (и активные, и неактивные) для истории
+        insurances = db.query(Insurance).filter(Insurance.car_id.in_(car_ids)).order_by(Insurance.end_date.desc()).all()
         if not insurances:
             await message.answer("У вас нет страховок.", reply_markup=get_insurance_submenu())
             return
@@ -203,8 +208,10 @@ async def list_insurances(message: types.Message):
             car = ins.car
             days_left = (ins.end_date.date() - today).days
             status = "⚠️ Истекла" if days_left < 0 else f"✅ {days_left} дн."
+            # Отмечаем активную страховку звёздочкой
+            active_mark = "⭐ " if ins.is_active else ""
             text += f"🚗 {car.brand} {car.model}\n"
-            text += f"  Полис: {ins.policy_number}\n"
+            text += f"  {active_mark}Полис: {ins.policy_number}\n"
             text += f"  Компания: {ins.company}\n"
             text += f"  Действует до: {ins.end_date.strftime('%d.%m.%Y')} ({status})\n"
             text += f"  Стоимость: {ins.cost:.2f} руб.\n\n"
