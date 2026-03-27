@@ -13,7 +13,8 @@ class User(Base):
     __tablename__ = "users"
     
     id = Column(Integer, primary_key=True, index=True)
-    telegram_id = Column(BigInteger, unique=True, index=True, nullable=False)
+    telegram_id = Column(BigInteger, unique=True, index=True, nullable=True)
+    master_key = Column(String, unique=True, index=True, nullable=True)  # если добавляли ранее
     username = Column(String, nullable=True)
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
@@ -95,6 +96,7 @@ class Insurance(Base):
     cost = Column(Numeric(10, 2), nullable=False)
     notes = Column(String, nullable=True)
     photo_id = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True, index=True)   # <-- добавлено
     notified_7d = Column(Boolean, default=False)
     notified_3d = Column(Boolean, default=False)
     notified_expired = Column(Boolean, default=False)
